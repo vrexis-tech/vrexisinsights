@@ -1,4 +1,4 @@
-module github.com/t3chfuzion/vrexis-insights-saas
+module github.com/T3chfuzion/vrexisinsights.git
 
 go 1.23.0
 

@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+} from 'recharts';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { v4 as uuidv4 } from 'uuid';
 
-
 const ServiceMonitorDashboard = () => {
   const [services, setServices] = useState([]);
+  const [metrics, setMetrics] = useState({ history: {} });
   const [darkMode, setDarkMode] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newService, setNewService] = useState({ name: '', url: '', type: 'website' });
@@ -33,11 +36,10 @@ const ServiceMonitorDashboard = () => {
       if (savedFormDraft) {
         try {
           const parsed = JSON.parse(savedFormDraft);
-          // Security: Validate parsed data
           if (parsed && typeof parsed === 'object') {
             setNewService({
-              name: (parsed.name || '').toString().slice(0, 100), // Limit length
-              url: (parsed.url || '').toString().slice(0, 500),   // Limit length
+              name: (parsed.name || '').toString().slice(0, 100),
+              url: (parsed.url || '').toString().slice(0, 500),
               type: ['website', 'server', 'misc'].includes(parsed.type) ? parsed.type : 'website'
             });
           }
@@ -62,7 +64,7 @@ const ServiceMonitorDashboard = () => {
     setIsLoaded(true);
   }, []);
 
-  // Save preferences when they change (with security considerations)
+  // Save preferences when they change
   useEffect(() => {
     if (isLoaded) {
       try {
@@ -93,13 +95,12 @@ const ServiceMonitorDashboard = () => {
     }
   }, [newService, isLoaded]);
 
-  // Enhanced secure WebSocket connection
+  // Enhanced secure WebSocket connection with metrics tracking
   useEffect(() => {
     if (!isLoaded) return;
 
     const loadServices = async () => {
       try {
-        // Try the secure API endpoint first, fallback to original
         const endpoints = ['/api/v1/services', '/services'];
         let response;
         
@@ -130,7 +131,6 @@ const ServiceMonitorDashboard = () => {
 
     const connectWebSocket = () => {
       try {
-        // Enhanced security: Use secure WebSocket if available
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}/ws`;
         const websocket = new WebSocket(wsUrl);
@@ -145,21 +145,37 @@ const ServiceMonitorDashboard = () => {
           try {
             const data = JSON.parse(event.data);
             
-            // Security: Validate incoming data structure
             if (Array.isArray(data)) {
               const validatedServices = data.filter(service => 
                 service && typeof service === 'object' && service.id
               );
               setServices(validatedServices);
             } else if (data && data.id) {
-              // Validate individual service update
-              if (typeof data === 'object' && data.id) {
-                setServices(prev => 
-                  prev.map(service => 
-                    service.id === data.id ? {...service, ...data} : service
-                  )
-                );
-              }
+              setServices(prev => {
+                const exists = prev.some(s => s.id === data.id);
+                const updated = exists
+                  ? prev.map(s => s.id === data.id ? { ...s, ...data } : s)
+                  : [...prev, data];
+
+                // Update metrics history for charts
+                setMetrics(prevMetrics => {
+                  const now = new Date().toISOString();
+                  const newHistory = { ...prevMetrics.history };
+                  if (!newHistory[data.id]) newHistory[data.id] = [];
+                  newHistory[data.id].push({
+                    time: now,
+                    latency: data.latency || 0,
+                    ping: data.ping_latency || 0
+                  });
+                  // Keep only last 50 entries per service
+                  if (newHistory[data.id].length > 50) {
+                    newHistory[data.id] = newHistory[data.id].slice(-50);
+                  }
+                  return { ...prevMetrics, history: newHistory };
+                });
+
+                return updated;
+              });
             }
           } catch (error) {
             console.error('Security: Error parsing WebSocket message:', error);
@@ -202,13 +218,11 @@ const ServiceMonitorDashboard = () => {
     try {
       const urlObj = new URL(url);
       
-      // Security: Block dangerous protocols
       const allowedProtocols = ['http:', 'https:'];
       if (!allowedProtocols.includes(urlObj.protocol)) {
         return false;
       }
       
-      // Security: Block localhost and private IPs in production
       const hostname = urlObj.hostname.toLowerCase();
       if (process.env.NODE_ENV === 'production') {
         const privateRanges = ['localhost', '127.0.0.1', '10.', '172.', '192.168.'];
@@ -220,16 +234,14 @@ const ServiceMonitorDashboard = () => {
       
       return true;
     } catch {
-      // Check if it's a valid IP address
       const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
       return ipRegex.test(url);
     }
   };
 
-  // Enhanced backend connectivity test with security headers
+  // Enhanced backend connectivity test
   const testBackendConnection = async () => {
     try {
-      // Try secure endpoint first, fallback to original
       const endpoints = ['/api/v1/services', '/services'];
       
       for (const endpoint of endpoints) {
@@ -263,17 +275,14 @@ const ServiceMonitorDashboard = () => {
   const handleAddService = async () => {
     if (!newService.name.trim() || !newService.url.trim()) return;
     
-    // Security: Input validation and sanitization
     const trimmedName = newService.name.trim().slice(0, 100);
     const trimmedUrl = newService.url.trim().slice(0, 500);
     
-    // Security: Enhanced URL validation
     if (!isValidUrl(trimmedUrl)) {
-      setUrlError('Please enter a valid URL (https://example.com) or IP address (192.168.1.1). Suspicious URLs are blocked for security.');
+      setUrlError('Please enter a valid URL (https://example.com), IP address (192.168.1.1), or hostname (router.local). Suspicious inputs are blocked for security.');
       return;
     }
 
-    // Security: Test backend connection first
     const isConnected = await testBackendConnection();
     if (!isConnected) {
       return;
@@ -282,17 +291,15 @@ const ServiceMonitorDashboard = () => {
     setUrlError('');
     setIsSubmitting(true);
     
-   const serviceData = {
-     id: uuidv4(),
-    name: trimmedName,
-    url: trimmedUrl,
-    type: newService.type,
-    enabled: true // ✅ ensure it's being monitored
-};
-
+    const serviceData = {
+      id: uuidv4(),
+      name: trimmedName,
+      url: trimmedUrl,
+      type: newService.type,
+      enabled: true
+    };
 
     try {
-      // Try secure endpoint first, fallback to original
       const endpoints = ['/api/v1/services', '/services'];
       let response;
       
@@ -317,7 +324,6 @@ const ServiceMonitorDashboard = () => {
         const createdService = await response.json();
         setServices(prev => [...prev, createdService]);
         
-        // Clear form securely
         setNewService({ name: '', url: '', type: 'website' });
         try {
           localStorage.removeItem('service-monitor-form-draft');
@@ -342,7 +348,6 @@ const ServiceMonitorDashboard = () => {
 
   // Enhanced secure delete with confirmation
   const handleDelete = async (id, name) => {
-    // Security: Validate ID format
     if (!id || typeof id !== 'string') {
       console.error('Security: Invalid service ID');
       return;
@@ -354,7 +359,6 @@ const ServiceMonitorDashboard = () => {
     }
 
     try {
-      // Try secure endpoint first, fallback to original
       const endpoints = [`/api/v1/services/${encodeURIComponent(id)}`, `/services/${encodeURIComponent(id)}`];
       let response;
       
@@ -388,7 +392,6 @@ const ServiceMonitorDashboard = () => {
   // Enhanced secure refresh
   const handleRefresh = async () => {
     try {
-      // Try secure endpoint first, fallback to original
       const endpoints = ['/api/v1/services', '/services'];
       let response;
       
@@ -427,7 +430,7 @@ const ServiceMonitorDashboard = () => {
     setShowAddForm(false);
   };
 
-  // Computed stats by type with security metrics
+  // Computed stats
   const statsByType = useMemo(() => {
     const stats = { website: 0, server: 0, misc: 0 };
     services.forEach(service => {
@@ -438,7 +441,6 @@ const ServiceMonitorDashboard = () => {
     return stats;
   }, [services]);
 
-  // Computed stats
   const upServices = useMemo(() => 
     services.filter(s => s.status === 'up').length, [services]
   );
@@ -465,6 +467,15 @@ const ServiceMonitorDashboard = () => {
     return Math.round(totalPing / servicesWithPing.length);
   }, [services]);
 
+  // Chart data preparation
+  const chartData = useMemo(() => {
+    return services.map(s => ({
+      name: s.name?.slice(0, 15) + (s.name?.length > 15 ? '...' : '') || 'Unknown',
+      latency: s.url && !s.url.includes('://') ? null : (s.latency || 0), // No HTTP for raw IPs
+      ping: s.ping_latency || 0
+    }));
+  }, [services]);
+
   const getTypeIcon = (type) => {
     switch (type) {
       case 'website': return '🌐';
@@ -476,9 +487,9 @@ const ServiceMonitorDashboard = () => {
 
   const getTypeLabel = (type) => {
     switch (type) {
-      case 'website': return 'Website';
+      case 'website': return 'Website/API';
       case 'server': return 'Server';
-      case 'misc': return 'Misc Device';
+      case 'misc': return 'Network Equipment';
       default: return 'Unknown';
     }
   };
@@ -628,7 +639,7 @@ const ServiceMonitorDashboard = () => {
             </div>
           )}
 
-          {/* Enhanced Stats Cards with Security Metrics */}
+          {/* Enhanced Stats Cards */}
           <div className="row mb-4">
             <div className="col-xl-2 col-md-4 mb-3">
               <div className={`card ${cardClass} stats-card success`}>
@@ -727,7 +738,7 @@ const ServiceMonitorDashboard = () => {
             </div>
           </div>
 
-          {/* Enhanced Services Section */}
+          {/* Services Section */}
           <div className={`card ${cardClass}`}>
             <div className="card-header">
               <div className="d-flex justify-content-between align-items-center">
@@ -764,8 +775,12 @@ const ServiceMonitorDashboard = () => {
                     <div className="d-flex align-items-center">
                       <span className="me-2">🛡️</span>
                       <div>
-                        <strong>Security Notice:</strong> All service data is encrypted and validated. 
-                        HTTPS URLs are recommended for maximum security.
+                        <strong>Monitoring Types:</strong> 
+                        <ul className="mb-0 mt-1">
+                          <li><strong>URLs:</strong> HTTP/HTTPS monitoring + ping (https://example.com)</li>
+                          <li><strong>IP Addresses:</strong> Ping-only monitoring (192.168.1.1)</li>
+                          <li><strong>Hostnames:</strong> Ping-only monitoring (router.local)</li>
+                        </ul>
                       </div>
                     </div>
                   </div>
@@ -790,14 +805,14 @@ const ServiceMonitorDashboard = () => {
                       <input
                         type="text"
                         className={`form-control ${inputClass} ${urlError ? 'is-invalid' : ''}`}
-                        placeholder="https://api.example.com or 192.168.1.1"
+                        placeholder="https://api.example.com, 192.168.1.1, or router.local"
                         value={newService.url}
                         onChange={(e) => setNewService({ ...newService, url: e.target.value })}
                         maxLength="500"
                       />
                       {urlError && <div className="invalid-feedback">{urlError}</div>}
                       <div className="form-text">
-                        <small>🔒 Secure protocols only • Input validated against threats</small>
+                        <small>🔒 Supports URLs (https://site.com), IP addresses (192.168.1.1), or hostnames (router.local)</small>
                       </div>
                     </div>
                     <div className="col-md-3 mb-3">
@@ -807,9 +822,9 @@ const ServiceMonitorDashboard = () => {
                         value={newService.type}
                         onChange={(e) => setNewService({ ...newService, type: e.target.value })}
                       >
-                        <option value="website">🌐 Website</option>
+                        <option value="website">🌐 Website/API</option>
                         <option value="server">🖥️ Server</option>
-                        <option value="misc">🔧 Network Device</option>
+                        <option value="misc">🔧 Network Equipment</option>
                       </select>
                     </div>
                   </div>
@@ -885,14 +900,14 @@ const ServiceMonitorDashboard = () => {
                             </div>
                           </div>
 
-                          <div className="row text-center">
+                                                      <div className="row text-center">
                             <div className="col-4">
                               <div className="border-end">
                                 <div className={`fw-bold ${darkMode ? 'text-white' : 'text-dark'}`}>
-                                  {service.latency || 0}ms
+                                  {service.url && !service.url.includes('://') ? 'N/A' : (service.latency || 0) + 'ms'}
                                 </div>
                                 <small className={darkMode ? 'text-light' : 'text-muted'}>
-                                  {service.url && !service.url.includes('://') && /^(\d{1,3}\.){3}\d{1,3}$/.test(service.url) ? 'N/A' : 'HTTP'}
+                                  HTTP
                                 </small>
                               </div>
                             </div>
@@ -926,7 +941,7 @@ const ServiceMonitorDashboard = () => {
                     🔒 Add Your First Service
                   </button>
                   <div className="mt-3">
-                    <small className="t ext-lighttext-success">
+                    <small className="text-success">
                       🛡️ All monitoring data encrypted and secured • Enterprise-grade protection
                     </small>
                   </div>
@@ -934,6 +949,54 @@ const ServiceMonitorDashboard = () => {
               )}
             </div>
           </div>
+
+          {/* Latency Chart */}
+          {services.length > 0 && (
+            <div className={`card shadow border-0 mt-4 ${cardClass}`}>
+              <div className="card-body">
+                <h5 className="mb-3">📈 HTTP & Ping Latency Chart</h5>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#6c757d' : '#dee2e6'} />
+                    <XAxis 
+                      dataKey="name" 
+                      stroke={darkMode ? '#adb5bd' : '#6c757d'}
+                      fontSize={12}
+                    />
+                    <YAxis 
+                      stroke={darkMode ? '#adb5bd' : '#6c757d'}
+                      fontSize={12}
+                    />
+                    <Tooltip 
+                      contentStyle={{
+                        backgroundColor: darkMode ? '#495057' : '#ffffff',
+                        border: darkMode ? '1px solid #6c757d' : '1px solid #dee2e6',
+                        borderRadius: '8px',
+                        color: darkMode ? '#ffffff' : '#212529'
+                      }}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="latency" 
+                      stroke="#0d6efd" 
+                      name="HTTP Latency (ms)" 
+                      strokeWidth={2}
+                      dot={{ fill: '#0d6efd', strokeWidth: 2, r: 4 }}
+                      connectNulls={false}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="ping" 
+                      stroke="#20c997" 
+                      name="Ping Latency (ms)" 
+                      strokeWidth={2}
+                      dot={{ fill: '#20c997', strokeWidth: 2, r: 4 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>
