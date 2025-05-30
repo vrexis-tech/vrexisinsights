@@ -4,6 +4,8 @@ import {
 } from 'recharts';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { v4 as uuidv4 } from 'uuid';
+import logo from './assets/logo.webp';
+
 
 // Authentication Context
 const AuthContext = createContext();
@@ -185,24 +187,20 @@ const LoginForm = ({ onToggleMode }) => {
     setLoading(false);
   };
 
-  return (
+ return (
     <div className="container d-flex align-items-center justify-content-center min-vh-100">
       <div className="row w-100">
-        <div className="col-md-6 col-lg-4 mx-auto">
-          <div className="card shadow">
+        <div className="col-md-6 col-lg-5 mx-auto">
+          <div className="card shadow overflow-hidden">
+            <div className="bg-light p-0 text-center">
+              <img src={logo} alt="Vrexis Logo" className="img-fluid w-1" style={{ maxHeight: '150px', objectFit: 'cover' }} />
+            </div>
             <div className="card-body p-4">
-              <div className="text-center mb-4">
-                <h1 className="h3 mb-3">🚀 Vrexis Insights</h1>
-                <p className="text-muted">Sign in to your account</p>
-              </div>
+              <p className="text-muted text-center">Sign in to your account</p>
 
-              {error && (
-                <div className="alert alert-danger" role="alert">
-                  {error}
-                </div>
-              )}
+              {error && <div className="alert alert-danger" role="alert">{error}</div>}
 
-              <div>
+              <form onSubmit={handleSubmit}>
                 <div className="mb-3">
                   <label htmlFor="email" className="form-label">Email</label>
                   <input
@@ -213,7 +211,6 @@ const LoginForm = ({ onToggleMode }) => {
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     disabled={loading || retryAfter > 0}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSubmit(e)}
                   />
                 </div>
 
@@ -227,12 +224,11 @@ const LoginForm = ({ onToggleMode }) => {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     disabled={loading || retryAfter > 0}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSubmit(e)}
                   />
                 </div>
 
                 <button 
-                  onClick={handleSubmit}
+                  type="submit"
                   className="btn btn-primary w-100 mb-3"
                   disabled={loading || retryAfter > 0}
                 >
@@ -247,7 +243,7 @@ const LoginForm = ({ onToggleMode }) => {
                     'Sign In'
                   )}
                 </button>
-              </div>
+              </form>
 
               <div className="text-center">
                 <span className="text-muted">Don't have an account? </span>
@@ -264,7 +260,7 @@ const LoginForm = ({ onToggleMode }) => {
                 <small className="text-muted">
                   <strong>Demo Account:</strong><br />
                   Email: admin@vrexisinsights.com<br />
-                  Password: admin123
+                  Password: testtest123
                 </small>
               </div>
             </div>
