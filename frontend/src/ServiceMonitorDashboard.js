@@ -34,6 +34,10 @@ import {
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
+// Import our API integration
+import apiService from './apiService';
+import { useServices } from './useServices';
+
 // Mock logo for demo
 const vrexisLogo = "data:image/svg+xml,%3Csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='50' cy='50' r='40' fill='%234F46E5'/%3E%3Ctext x='50' y='55' font-family='Arial' font-size='20' fill='white' text-anchor='middle'%3EV%3C/text%3E%3C/svg%3E";
 
@@ -48,7 +52,7 @@ const useAuth = () => {
   return context;
 };
 
-// Authentication Provider
+// Authentication Provider - Updated with real API
 const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
@@ -58,16 +62,21 @@ const AuthProvider = ({ children }) => {
     // Check for stored auth data on mount
     const storedToken = sessionStorage.getItem('auth-token');
     const storedUser = sessionStorage.getItem('auth-user');
+    const storedRefreshToken = sessionStorage.getItem('refresh-token');
     
     if (storedToken && storedUser) {
       try {
         const userData = JSON.parse(storedUser);
         setToken(storedToken);
         setUser(userData);
+        
+        // Set tokens in API service
+        apiService.setTokens(storedToken, storedRefreshToken);
       } catch (error) {
         console.error('Error parsing stored user data:', error);
         sessionStorage.removeItem('auth-token');
         sessionStorage.removeItem('auth-user');
+        sessionStorage.removeItem('refresh-token');
       }
     }
     setLoading(false);
@@ -75,84 +84,86 @@ const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      const response = await fetch('http://localhost:8080/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        
-        if (response.status === 429) {
-          const retryAfter = response.headers.get('Retry-After') || '60';
-          throw new Error(`Rate limit exceeded. Please wait ${retryAfter} seconds before trying again.`);
-        }
-        
-        throw new Error(error.error || 'Login failed');
+      console.log('Attempting login with API service...');
+      const data = await apiService.login(email, password);
+      console.log('Login response:', data);
+      
+      // Handle different response formats from your Go backend
+      const accessToken = data.access_token || data.token;
+      const refreshToken = data.refresh_token;
+      const userData = data.user;
+      
+      if (!accessToken) {
+        throw new Error('No access token received from server');
       }
-
-      const data = await response.json();
       
-      setToken(data.token);
-      setUser(data.user);
+      setToken(accessToken);
+      setUser(userData);
       
-      sessionStorage.setItem('auth-token', data.token);
-      sessionStorage.setItem('auth-user', JSON.stringify(data.user));
+      // Set tokens in API service
+      apiService.setTokens(accessToken, refreshToken);
+      
+      sessionStorage.setItem('auth-token', accessToken);
+      sessionStorage.setItem('auth-user', JSON.stringify(userData));
+      if (refreshToken) {
+        sessionStorage.setItem('refresh-token', refreshToken);
+      }
       
       return { success: true };
     } catch (error) {
+      console.error('Login error:', error);
       return { success: false, error: error.message };
     }
   };
 
   const register = async (email, password, firstName, lastName) => {
     try {
-      const response = await fetch('http://localhost:8080/auth/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          email, 
-          password, 
-          first_name: firstName, 
-          last_name: lastName 
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        
-        if (response.status === 429) {
-          const retryAfter = response.headers.get('Retry-After') || '60';
-          throw new Error(`Rate limit exceeded. Please wait ${retryAfter} seconds before trying again.`);
-        }
-        
-        throw new Error(error.error || 'Registration failed');
+      console.log('Attempting registration with API service...');
+      const data = await apiService.register(email, password, firstName, lastName);
+      console.log('Registration response:', data);
+      
+      // Handle different response formats from your Go backend
+      const accessToken = data.access_token || data.token;
+      const refreshToken = data.refresh_token;
+      const userData = data.user;
+      
+      if (!accessToken) {
+        throw new Error('No access token received from server');
       }
-
-      const data = await response.json();
       
-      setToken(data.token);
-      setUser(data.user);
+      setToken(accessToken);
+      setUser(userData);
       
-      sessionStorage.setItem('auth-token', data.token);
-      sessionStorage.setItem('auth-user', JSON.stringify(data.user));
+      // Set tokens in API service
+      apiService.setTokens(accessToken, refreshToken);
+      
+      sessionStorage.setItem('auth-token', accessToken);
+      sessionStorage.setItem('auth-user', JSON.stringify(userData));
+      if (refreshToken) {
+        sessionStorage.setItem('refresh-token', refreshToken);
+      }
       
       return { success: true };
     } catch (error) {
+      console.error('Registration error:', error);
       return { success: false, error: error.message };
     }
   };
 
-  const logout = () => {
-    setToken(null);
-    setUser(null);
-    sessionStorage.removeItem('auth-token');
-    sessionStorage.removeItem('auth-user');
+  const logout = async () => {
+    try {
+      // Call API logout endpoint
+      await apiService.logout();
+    } catch (error) {
+      console.error('Logout API call failed:', error);
+    } finally {
+      // Always clear local auth state
+      setToken(null);
+      setUser(null);
+      sessionStorage.removeItem('auth-token');
+      sessionStorage.removeItem('auth-user');
+      sessionStorage.removeItem('refresh-token');
+    }
   };
 
   const isAuthenticated = () => {
@@ -304,9 +315,9 @@ const LoginForm = ({ onToggleMode }) => {
 
             <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
               <div className="text-sm text-blue-700 dark:text-blue-400">
-                <div className="font-medium mb-1">Demo Account:</div>
+                <div className="font-medium mb-1">Test Account:</div>
                 <div>Email: admin@vrexisinsights.com</div>
-                <div>Password: testtest123</div>
+                <div>Password: TestPass123!</div>
               </div>
             </div>
           </div>
@@ -345,8 +356,8 @@ const RegisterForm = ({ onToggleMode }) => {
       return;
     }
 
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (formData.password.length < 8) {
+      setError('Password must be at least 8 characters');
       return;
     }
 
@@ -473,7 +484,7 @@ const RegisterForm = ({ onToggleMode }) => {
                   disabled={loading || retryAfter > 0}
                   className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Must be at least 6 characters</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Must be at least 8 characters</p>
               </div>
 
               <div>
@@ -541,87 +552,99 @@ const AuthScreen = () => {
   );
 };
 
-// Main Insights Dashboard with improved status indicator positioning
+// Main Insights Dashboard - Updated with real API integration
 const ServiceMonitorDashboard = () => {
   const { user, token, logout } = useAuth();
-  const [services, setServices] = useState([]);
-  const [darkMode, setDarkMode] = useState(false);
+  
+  // REAL API integration - replaces all mock data
+  const {
+    services,
+    loading: servicesLoading,
+    error: servicesError,
+    lastUpdated,
+    connectionStatus,
+    stats,
+    addService: addServiceApi,
+    deleteService: deleteServiceApi,
+    refreshServices: refreshServicesApi,
+    refetch: refetchServices
+  } = useServices(token);
+
+  // UI state only - with dark mode persistence
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('vrexis-dark-mode');
+    return saved ? JSON.parse(saved) : false;
+  });
   const [showAddForm, setShowAddForm] = useState(false);
   const [newService, setNewService] = useState({ name: '', url: '', type: 'website' });
   const [urlError, setUrlError] = useState('');
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [securityStatus, setSecurityStatus] = useState('secure');
-  const [encryptionEnabled, setEncryptionEnabled] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Mock data for demo
+  // Save dark mode preference whenever it changes
   useEffect(() => {
-    const mockServices = [
-      { 
-        id: '1', 
-        name: 'Main Website', 
-        url: 'https://vrexis.com', 
-        type: 'website', 
-        status: 'up', 
-        latency: 245, 
-        ping_latency: 12, 
-        last_checked: new Date().toISOString(),
-        enabled: true
-      },
-      { 
-        id: '2', 
-        name: 'API Server', 
-        url: 'https://api.vrexis.com', 
-        type: 'server', 
-        status: 'up', 
-        latency: 156, 
-        ping_latency: 8, 
-        last_checked: new Date().toISOString(),
-        enabled: true
-      },
-      { 
-        id: '3', 
-        name: 'Database Server', 
-        url: '192.168.1.100', 
-        type: 'server', 
-        status: 'down', 
-        latency: 0, 
-        ping_latency: 0, 
-        last_checked: new Date().toISOString(),
-        enabled: true
-      },
-      { 
-        id: '4', 
-        name: 'Network Router', 
-        url: '192.168.1.1', 
-        type: 'misc', 
-        status: 'up', 
-        latency: 0, 
-        ping_latency: 3, 
-        last_checked: new Date().toISOString(),
-        enabled: true
-      }
-    ];
-    setServices(mockServices);
-    setIsLoaded(true);
-    setConnectionStatus('connected');
-  }, []);
+    localStorage.setItem('vrexis-dark-mode', JSON.stringify(darkMode));
+  }, [darkMode]);
 
-  // API helper (simplified for demo)
-  const apiCall = useCallback(async (url, options = {}) => {
-    // Mock API responses
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          ok: true,
-          json: () => Promise.resolve({ success: true })
-        });
-      }, 500);
-    });
-  }, [token]);
+  // Extract stats from useServices hook
+  const { upServices, downServices, secureServices, statsByType, avgLatency, avgPingLatency } = stats;
+
+  // Filter services based on search query (MOVE BEFORE EARLY RETURNS)
+  const filteredServices = useMemo(() => {
+    if (!searchQuery.trim()) return services;
+    
+    const query = searchQuery.toLowerCase();
+    return services.filter(service => 
+      service.name?.toLowerCase().includes(query) ||
+      service.url?.toLowerCase().includes(query) ||
+      service.type?.toLowerCase().includes(query)
+    );
+  }, [services, searchQuery]);
+
+  // Chart data preparation (MOVE BEFORE EARLY RETURNS)
+  const chartData = useMemo(() => {
+    return filteredServices.map(s => ({
+      name: s.name?.slice(0, 15) + (s.name?.length > 15 ? '...' : '') || 'Unknown',
+      latency: s.url && !s.url.includes('://') ? null : (s.latency || 0),
+      ping: s.ping_latency || 0
+    }));
+  }, [filteredServices]);
+
+  // Show loading state
+  if (servicesLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Loading services...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state (only if no services and there's an error)
+  if (servicesError && services.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+            Connection Error
+          </h3>
+          <p className="text-gray-600 dark:text-gray-400 mb-4">
+            {servicesError}
+          </p>
+          <button 
+            onClick={refetchServices}
+            className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Enhanced URL validation
   const isValidUrl = (url) => {
@@ -661,7 +684,7 @@ const ServiceMonitorDashboard = () => {
     }
   };
 
-  // Add service handler
+  // Real API service handlers
   const handleAddService = async () => {
     if (!newService.name.trim() || !newService.url.trim()) return;
     
@@ -677,27 +700,21 @@ const ServiceMonitorDashboard = () => {
     setIsSubmitting(true);
     
     const serviceData = {
-      id: uuidv4(),
       name: trimmedName,
       url: trimmedUrl,
       type: newService.type,
-      enabled: true,
-      status: 'up',
-      latency: Math.floor(Math.random() * 300) + 50,
-      ping_latency: Math.floor(Math.random() * 20) + 1,
-      last_checked: new Date().toISOString()
+      enabled: true
     };
 
     try {
-      await apiCall('/api/v1/services', {
-        method: 'POST',
-        body: JSON.stringify(serviceData)
-      });
-
-      setServices(prev => [...prev, serviceData]);
+      const result = await addServiceApi(serviceData);
       
-      setNewService({ name: '', url: '', type: 'website' });
-      setShowAddForm(false);
+      if (result.success) {
+        setNewService({ name: '', url: '', type: 'website' });
+        setShowAddForm(false);
+      } else {
+        setUrlError(result.error || 'Failed to add service');
+      }
     } catch (error) {
       console.error('Error adding service:', error);
       setUrlError('Failed to add service');
@@ -706,33 +723,25 @@ const ServiceMonitorDashboard = () => {
     }
   };
 
-  // Delete service handler
   const handleDelete = async (id, name) => {
     if (!window.confirm(`Are you sure you want to delete "${name}"?`)) {
       return;
     }
 
     try {
-      await apiCall(`/api/v1/services/${encodeURIComponent(id)}`, {
-        method: 'DELETE'
-      });
-      
-      setServices(prev => prev.filter(s => s.id !== id));
+      const result = await deleteServiceApi(id);
+      if (!result.success) {
+        alert('Failed to delete service: ' + result.error);
+      }
     } catch (error) {
       console.error('Error deleting service:', error);
+      alert('Failed to delete service');
     }
   };
 
-  // Refresh handler
   const handleRefresh = async () => {
     try {
-      // Mock refresh
-      setServices(prev => prev.map(service => ({
-        ...service,
-        latency: Math.floor(Math.random() * 300) + 50,
-        ping_latency: Math.floor(Math.random() * 20) + 1,
-        last_checked: new Date().toISOString()
-      })));
+      await refreshServicesApi();
     } catch (error) {
       console.error('Error refreshing services:', error);
     }
@@ -743,52 +752,6 @@ const ServiceMonitorDashboard = () => {
     setUrlError('');
     setShowAddForm(false);
   };
-
-  // Computed stats
-  const statsByType = useMemo(() => {
-    const stats = { website: 0, server: 0, misc: 0 };
-    services.forEach(service => {
-      if (stats.hasOwnProperty(service.type)) {
-        stats[service.type]++;
-      }
-    });
-    return stats;
-  }, [services]);
-
-  const upServices = useMemo(() => 
-    services.filter(s => s.status === 'up').length, [services]
-  );
-  
-  const downServices = useMemo(() => 
-    services.filter(s => s.status === 'down').length, [services]
-  );
-
-  const secureServices = useMemo(() => 
-    services.filter(s => s.url && s.url.startsWith('https://')).length, [services]
-  );
-
-  const avgLatency = useMemo(() => {
-    const upServicesWithLatency = services.filter(s => s.status === 'up' && s.latency > 0);
-    if (upServicesWithLatency.length === 0) return 0;
-    const totalLatency = upServicesWithLatency.reduce((sum, s) => sum + s.latency, 0);
-    return Math.round(totalLatency / upServicesWithLatency.length);
-  }, [services]);
-
-  const avgPingLatency = useMemo(() => {
-    const servicesWithPing = services.filter(s => s.ping_latency > 0);
-    if (servicesWithPing.length === 0) return 0;
-    const totalPing = servicesWithPing.reduce((sum, s) => sum + s.ping_latency, 0);
-    return Math.round(totalPing / servicesWithPing.length);
-  }, [services]);
-
-  // Chart data preparation
-  const chartData = useMemo(() => {
-    return services.map(s => ({
-      name: s.name?.slice(0, 15) + (s.name?.length > 15 ? '...' : '') || 'Unknown',
-      latency: s.url && !s.url.includes('://') ? null : (s.latency || 0),
-      ping: s.ping_latency || 0
-    }));
-  }, [services]);
 
   const getTypeIcon = (type) => {
     switch (type) {
@@ -834,34 +797,34 @@ const ServiceMonitorDashboard = () => {
     }
   };
 
+  // Updated status indicator with real connection status
   const getStatusIndicator = () => {
-    if (connectionStatus === 'connected' && securityStatus === 'secure') {
+    if (connectionStatus === 'connected') {
       return (
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 px-3 py-1.5 bg-green-100 text-green-700 rounded-full text-sm dark:bg-green-900/20 dark:text-green-400 font-medium shadow-sm">
             <Wifi className="w-4 h-4" />
             Connected
+            {lastUpdated && (
+              <span className="text-xs opacity-75 ml-1">
+                • {lastUpdated.toLocaleTimeString()}
+              </span>
+            )}
           </div>
-          {encryptionEnabled && (
-            <div className="flex items-center gap-1 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-full text-sm dark:bg-blue-900/20 dark:text-blue-400 font-medium shadow-sm">
-              <Shield className="w-4 h-4" />
-              Secure
-            </div>
-          )}
         </div>
       );
-    } else if (connectionStatus === 'disconnected') {
+    } else if (connectionStatus === 'connecting') {
       return (
         <div className="flex items-center gap-1 px-3 py-1.5 bg-yellow-100 text-yellow-700 rounded-full text-sm dark:bg-yellow-900/20 dark:text-yellow-400 font-medium shadow-sm">
-          <WifiOff className="w-4 h-4" />
-          Disconnected
+          <div className="w-4 h-4 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin"></div>
+          Connecting...
         </div>
       );
     } else {
       return (
-        <div className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-full text-sm dark:bg-gray-800 dark:text-gray-400 font-medium shadow-sm">
-          <Activity className="w-4 h-4" />
-          Connecting...
+        <div className="flex items-center gap-1 px-3 py-1.5 bg-red-100 text-red-700 rounded-full text-sm dark:bg-red-900/20 dark:text-red-400 font-medium shadow-sm">
+          <WifiOff className="w-4 h-4" />
+          Disconnected
         </div>
       );
     }
@@ -1206,9 +1169,9 @@ const ServiceMonitorDashboard = () => {
                 </div>
               )}
 
-              {services.length > 0 ? (
+              {filteredServices.length > 0 ? (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {services.map((service) => {
+                  {filteredServices.map((service) => {
                     const isSecure = service.url && service.url.startsWith('https://');
                     return (
                       <div 
@@ -1303,7 +1266,7 @@ const ServiceMonitorDashboard = () => {
           </div>
 
           {/* Latency Chart */}
-          {services.length > 0 && (
+          {filteredServices.length > 0 && (
             <div className={`mt-8 rounded-2xl ${darkMode ? 'bg-gray-800' : 'bg-white'} shadow-lg border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
               <div className="p-6">
                 <h4 className={`text-lg font-semibold mb-6 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
