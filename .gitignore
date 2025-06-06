@@ -1,0 +1,13 @@
+# Node
+node_modules/
+
+# Go binaries
+/backend/*.exe
+/backend/vrexinsights-new
+/backend/vrexisinsights-backend
+
+# Databases
+/backend/*.db
+
+# OS files
+.DS_Store
