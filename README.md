@@ -317,8 +317,10 @@ go test ./...
 
 # Frontend tests
 cd frontend
+npm install # install dependencies including react-scripts
 npm test
 ```
+> **Note**: `react-scripts` must be installed. Run `npm install` in the `frontend/` directory before executing `npm test`.
 
 ### Building for Production
 
