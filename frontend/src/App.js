@@ -99,7 +99,7 @@ const AuthProvider = ({ children }) => {
         // Handle rate limiting specifically
         if (response.status === 429) {
           const retryAfter = response.headers.get('Retry-After') || '60';
-          throw new Error(Rate limit exceeded. Please wait ${retryAfter} seconds before trying again.);
+          throw new Error(`Rate limit exceeded. Please wait ${retryAfter} seconds before trying again.`);
         }
         
         throw new Error(error.error || 'Registration failed');
@@ -550,7 +550,7 @@ const ServiceMonitorDashboard = () => {
       if (error.message.includes('Rate limit')) {
         throw error;
       }
-      throw new Error(Network error: ${error.message});
+      throw new Error(`Network error: ${error.message}`);
     }
   }, [token]);
 
