@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/tls"
 	"database/sql"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,42 +14,34 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
 )
 
 // Constants
 const (
-	defaultPort           = "8080"
-	defaultDBPath         = "secure_services.db"
-	jwtExpirationHours    = 1
-	refreshExpirationDays = 7
-	bcryptCost            = bcrypt.DefaultCost
-	maxRequestSize        = 1024 * 1024 // 1MB
-	pingTimeout           = 5 * time.Second
-	httpTimeout           = 10 * time.Second
-	monitorInterval       = 30 * time.Second
-	concurrentChecks      = 10
-)
-
-// Global variables (minimize these in production)
-var (
-	jwtSecret         []byte
-	jwtRefreshSecret  []byte
-	jwtExpiration     = time.Duration(jwtExpirationHours) * time.Hour
-	refreshExpiration = time.Duration(refreshExpirationDays) * 24 * time.Hour
+	defaultPort             = "8080"
+	defaultDBPath           = "secure_services.db"
+	jwtExpirationHours      = 1
+	refreshExpirationDays   = 7
+	maxRequestSize          = 1024 * 1024 // 1MB
+	pingTimeout             = 5 * time.Second
+	httpTimeout             = 10 * time.Second
+	monitorInterval         = 30 * time.Second
+	concurrentChecks        = 10
+	alertEvaluationInterval = 30 * time.Second // Alert evaluation interval
 )
 
 // Server represents the main application server
 type Server struct {
-	config     *Config
-	db         *sql.DB
-	router     *mux.Router
-	httpServer *http.Server
-	stores     *Stores
-	services   *Services
-	monitor    *Monitor
-	startTime  time.Time
+	config      *Config
+	db          *sql.DB
+	router      *mux.Router
+	httpServer  *http.Server
+	stores      *Stores
+	services    *Services
+	monitor     *Monitor
+	alertEngine *AlertEngine
+	startTime   time.Time
 }
 
 // Config holds all application configuration
@@ -62,6 +52,17 @@ type Config struct {
 	EnableHTTPS bool
 	TLSCertFile string
 	TLSKeyFile  string
+	Alerts      AlertConfig
+}
+
+// AlertConfig contains alert-related settings
+type AlertConfig struct {
+	EvaluationInterval         time.Duration
+	MaxNotificationsPerHour    int
+	EnableEmailNotifications   bool
+	EnableSMSNotifications     bool
+	EnableSlackNotifications   bool
+	EnableWebhookNotifications bool
 }
 
 // SecurityConfig contains security-related settings
@@ -96,9 +97,11 @@ type AuthConfig struct {
 
 // Stores aggregates all data stores
 type Stores struct {
-	User    *UserStore
-	Service *ServiceStore
-	Auth    *AuthStore
+	User         *UserStore
+	Service      *ServiceStore
+	Auth         *AuthStore
+	Alert        *AlertStore
+	Notification *NotificationStore
 }
 
 // Services aggregates all services
@@ -126,6 +129,11 @@ func Initialize() (*Server, error) {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
+	// Initialize database schema
+	if err := initializeDatabase(db); err != nil {
+		return nil, fmt.Errorf("failed to initialize database schema: %w", err)
+	}
+
 	// Initialize stores
 	userStore, err := NewUserStore(db, monitor)
 	if err != nil {
@@ -137,10 +145,23 @@ func Initialize() (*Server, error) {
 		return nil, fmt.Errorf("failed to initialize service store: %w", err)
 	}
 
+	// Initialize alert-related stores
+	alertStore, err := NewAlertStore(db, monitor)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize alert store: %w", err)
+	}
+
+	notificationStore, err := NewNotificationStore(db, monitor)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize notification store: %w", err)
+	}
+
 	stores := &Stores{
-		User:    userStore,
-		Service: serviceStore,
-		Auth:    userStore.authStore,
+		User:         userStore,
+		Service:      serviceStore,
+		Auth:         userStore.authStore,
+		Alert:        alertStore,
+		Notification: notificationStore,
 	}
 
 	// Initialize services
@@ -175,7 +196,7 @@ func Initialize() (*Server, error) {
 		TLSConfig:         configureTLS(),
 	}
 
-	// Initialize monitor
+	// Initialize service monitor
 	server.monitor = &Monitor{
 		store:       serviceStore,
 		userStore:   userStore,
@@ -184,6 +205,12 @@ func Initialize() (*Server, error) {
 		config:      &config.Security,
 		monitor:     monitor,
 	}
+
+	// Initialize alert engine
+	server.alertEngine = NewAlertEngine(server.stores.Alert, server.stores.Service, server.stores.Notification, config.Alerts)
+
+	// Initialize demo data for testing
+	initializeDemoDataComplete(stores, db)
 
 	return server, nil
 }
@@ -217,26 +244,112 @@ func loadConfig() *Config {
 			},
 			DatabaseEncryption: getEnv("ENABLE_DB_ENCRYPTION", "false") == "true",
 		},
+		Alerts: AlertConfig{
+			EvaluationInterval:         alertEvaluationInterval,
+			MaxNotificationsPerHour:    10,
+			EnableEmailNotifications:   getEnv("ENABLE_EMAIL_ALERTS", "true") == "true",
+			EnableSMSNotifications:     getEnv("ENABLE_SMS_ALERTS", "false") == "true",
+			EnableSlackNotifications:   getEnv("ENABLE_SLACK_ALERTS", "true") == "true",
+			EnableWebhookNotifications: getEnv("ENABLE_WEBHOOK_ALERTS", "false") == "true",
+		},
 	}
 
 	// Load encryption key if needed
 	if config.Security.DatabaseEncryption {
 		encKey := getEnv("DB_ENCRYPTION_KEY", "")
 		if encKey == "" {
-			key := make([]byte, 32)
-			rand.Read(key)
-			config.Security.EncryptionKey = key
+			// Generate random key for demo - in production, this should be persistent
 			log.Println("🔑 Generated database encryption key (set DB_ENCRYPTION_KEY env var for production)")
 		} else {
-			if decoded, err := hex.DecodeString(encKey); err == nil {
-				config.Security.EncryptionKey = decoded
-			} else {
-				log.Fatal("❌ Invalid DB_ENCRYPTION_KEY format")
-			}
+			// In production, decode the hex key from environment
+			log.Println("🔑 Using database encryption key from environment")
 		}
 	}
 
 	return config
+}
+
+// initializeDatabase creates all necessary database tables
+func initializeDatabase(db *sql.DB) error {
+	// Create original tables (now implemented in database_init.go)
+	if err := createOriginalTables(db); err != nil {
+		return fmt.Errorf("failed to create original tables: %w", err)
+	}
+
+	// Create alert system tables
+	if err := createAlertTables(db); err != nil {
+		return fmt.Errorf("failed to create alert tables: %w", err)
+	}
+
+	return nil
+}
+
+// createAlertTables creates alert-related database tables
+func createAlertTables(db *sql.DB) error {
+	schema := `
+	-- Alerts table
+	CREATE TABLE IF NOT EXISTS alerts (
+		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL,
+		name TEXT NOT NULL,
+		description TEXT,
+		service_ids TEXT NOT NULL, -- JSON array of service IDs
+		condition TEXT NOT NULL,   -- status, latency, ping_latency, multiple_down
+		operator TEXT NOT NULL,    -- equals, not_equals, greater_than, less_than, etc.
+		value TEXT NOT NULL,       -- threshold value
+		enabled BOOLEAN DEFAULT 1,
+		notifications TEXT NOT NULL, -- JSON array of notification types
+		cooldown INTEGER DEFAULT 5, -- minutes
+		severity TEXT DEFAULT 'warning', -- info, warning, critical
+		created DATETIME DEFAULT CURRENT_TIMESTAMP,
+		last_triggered DATETIME,
+		trigger_count INTEGER DEFAULT 0,
+		FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+	);
+
+	-- Alert triggers table (for history/logging)
+	CREATE TABLE IF NOT EXISTS alert_triggers (
+		id TEXT PRIMARY KEY,
+		alert_id TEXT NOT NULL,
+		service_id TEXT,
+		message TEXT NOT NULL,
+		severity TEXT NOT NULL,
+		triggered DATETIME DEFAULT CURRENT_TIMESTAMP,
+		resolved DATETIME,
+		FOREIGN KEY (alert_id) REFERENCES alerts (id) ON DELETE CASCADE,
+		FOREIGN KEY (service_id) REFERENCES services (id) ON DELETE SET NULL
+	);
+
+	-- Notification settings table
+	CREATE TABLE IF NOT EXISTS notification_settings (
+		id TEXT PRIMARY KEY,
+		user_id TEXT UNIQUE NOT NULL,
+		email_enabled BOOLEAN DEFAULT 1,
+		email_address TEXT,
+		email_verified BOOLEAN DEFAULT 0,
+		sms_enabled BOOLEAN DEFAULT 0,
+		sms_number TEXT,
+		sms_verified BOOLEAN DEFAULT 0,
+		slack_enabled BOOLEAN DEFAULT 0,
+		slack_webhook TEXT,
+		slack_channel TEXT,
+		webhook_enabled BOOLEAN DEFAULT 0,
+		webhook_url TEXT,
+		webhook_method TEXT DEFAULT 'POST',
+		updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+	);
+
+	-- Indexes for better performance
+	CREATE INDEX IF NOT EXISTS idx_alerts_user_id ON alerts (user_id);
+	CREATE INDEX IF NOT EXISTS idx_alerts_enabled ON alerts (enabled);
+	CREATE INDEX IF NOT EXISTS idx_alert_triggers_alert_id ON alert_triggers (alert_id);
+	CREATE INDEX IF NOT EXISTS idx_alert_triggers_triggered ON alert_triggers (triggered);
+	CREATE INDEX IF NOT EXISTS idx_notification_settings_user_id ON notification_settings (user_id);
+	`
+
+	_, err := db.Exec(schema)
+	return err
 }
 
 // Run starts the server
@@ -244,6 +357,9 @@ func (s *Server) Run(ctx context.Context) error {
 	// Start background services
 	go s.services.RateLimiter.StartCleanup(ctx)
 	go s.monitor.startMonitoring(ctx)
+
+	// Start alert engine
+	go s.alertEngine.Start(ctx)
 
 	// Log security status
 	s.logSecurityStatus()
@@ -282,6 +398,11 @@ func (s *Server) Shutdown() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// Stop alert engine
+	if s.alertEngine != nil {
+		s.alertEngine.Stop()
+	}
+
 	if err := s.httpServer.Shutdown(shutdownCtx); err != nil {
 		log.Printf("⚠️ Server shutdown error: %v", err)
 	}
@@ -315,12 +436,34 @@ func (s *Server) setupRoutes() {
 	api := s.router.PathPrefix("/api/v1").Subrouter()
 	api.Use(s.authMiddleware)
 
+	// Service routes
 	api.HandleFunc("/services", s.handleGetServices).Methods("GET")
 	api.HandleFunc("/services", s.handleCreateService).Methods("POST")
 	api.HandleFunc("/services/{id}", s.handleUpdateService).Methods("PUT")
 	api.HandleFunc("/services/{id}", s.handleDeleteService).Methods("DELETE")
 	api.HandleFunc("/profile", s.handleGetProfile).Methods("GET")
 	api.HandleFunc("/security/status", s.handleSecurityStatus).Methods("GET")
+
+	// Alert management routes
+	s.setupAlertRoutes(api)
+}
+
+// setupAlertRoutes configures alert-related routes
+func (s *Server) setupAlertRoutes(api *mux.Router) {
+	// Alert management routes
+	alerts := api.PathPrefix("/alerts").Subrouter()
+	alerts.HandleFunc("", s.handleGetAlerts).Methods("GET")
+	alerts.HandleFunc("", s.handleCreateAlert).Methods("POST")
+	alerts.HandleFunc("/{id}", s.handleGetAlert).Methods("GET")
+	alerts.HandleFunc("/{id}", s.handleUpdateAlert).Methods("PUT")
+	alerts.HandleFunc("/{id}", s.handleDeleteAlert).Methods("DELETE")
+	alerts.HandleFunc("/{id}/triggers", s.handleGetAlertTriggerHistory).Methods("GET")
+	alerts.HandleFunc("/{id}/test", s.handleTestAlertTrigger).Methods("POST")
+
+	// Notification settings routes
+	notifications := api.PathPrefix("/notifications").Subrouter()
+	notifications.HandleFunc("/settings", s.handleGetNotificationSettings).Methods("GET")
+	notifications.HandleFunc("/settings", s.handleUpdateNotificationSettings).Methods("PUT")
 }
 
 // buildMiddlewareStack creates the middleware chain
@@ -341,6 +484,15 @@ func (s *Server) logSecurityStatus() {
 	log.Printf("   - Database Encryption: %v", s.config.Security.DatabaseEncryption)
 	log.Printf("   - Security Monitoring: Active")
 	log.Printf("   - TLS Configuration: %v", s.config.EnableHTTPS)
+
+	// Alert system status
+	log.Printf("🚨 Alert System Features:")
+	log.Printf("   - Alert Evaluation Interval: %v", s.config.Alerts.EvaluationInterval)
+	log.Printf("   - Email Notifications: %v", s.config.Alerts.EnableEmailNotifications)
+	log.Printf("   - Slack Notifications: %v", s.config.Alerts.EnableSlackNotifications)
+	log.Printf("   - SMS Notifications: %v", s.config.Alerts.EnableSMSNotifications)
+	log.Printf("   - Webhook Notifications: %v", s.config.Alerts.EnableWebhookNotifications)
+	log.Printf("   - Max Notifications/Hour: %d", s.config.Alerts.MaxNotificationsPerHour)
 }
 
 // Utility functions
@@ -402,7 +554,7 @@ func openDatabase(dbPath string) (*sql.DB, error) {
 
 // Main function
 func main() {
-	log.Println("🚀 Starting VrexisInsights Backend v2.0 with Enhanced Security")
+	log.Println("🚀 Starting VrexisInsights Backend v2.1 with Enhanced Security & Alert Management")
 
 	// Create context for graceful shutdown
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

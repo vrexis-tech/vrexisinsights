@@ -1,14 +1,11 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import './index.css';
-import App from './App';
-import reportWebVitals from './reportWebVitals';
+import './index.css';  // your Tailwind or custom styles
+import Dashboard from './App';  // ✅ Now points to Dashboard.js
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <App />
+    <Dashboard /> {/* Ensure you're rendering Dashboard */}
   </React.StrictMode>
 );
-
-reportWebVitals();

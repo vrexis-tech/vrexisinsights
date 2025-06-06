@@ -16,6 +16,15 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// Global variables for JWT configuration
+var (
+	jwtSecret         []byte
+	jwtRefreshSecret  []byte
+	jwtExpiration     = time.Duration(1) * time.Hour    // 1 hour for access tokens
+	refreshExpiration = time.Duration(7*24) * time.Hour // 7 days for refresh tokens
+	bcryptCost        = bcrypt.DefaultCost
+)
+
 // AuthStore manages authentication state
 type AuthStore struct {
 	mu            sync.RWMutex
@@ -92,6 +101,33 @@ func (as *AuthStore) cleanup() {
 	}
 }
 
+// Reset login attempts (useful after successful login)
+func (as *AuthStore) resetLoginAttempts(ip, email string) {
+	as.mu.Lock()
+	defer as.mu.Unlock()
+
+	key := ip + ":" + email
+	delete(as.attempts, key)
+}
+
+// Get remaining lockout time
+func (as *AuthStore) getLockoutTimeRemaining(ip, email string) time.Duration {
+	as.mu.RLock()
+	defer as.mu.RUnlock()
+
+	key := ip + ":" + email
+	attempt, exists := as.attempts[key]
+	if !exists {
+		return 0
+	}
+
+	remaining := time.Until(attempt.LockedUntil)
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
+}
+
 // recordLoginAttempt records a login attempt and returns whether login is allowed
 func (as *AuthStore) recordLoginAttempt(ip, email string, maxAttempts int, lockoutDuration time.Duration) bool {
 	as.mu.Lock()
@@ -149,6 +185,46 @@ func (as *AuthStore) revokeToken(tokenStr string, expiry time.Time) {
 	defer as.mu.Unlock()
 
 	as.revokedTokens[tokenStr] = expiry
+}
+
+// Store refresh token
+func (as *AuthStore) storeRefreshToken(token, userID string, expiresAt time.Time) {
+	as.mu.Lock()
+	defer as.mu.Unlock()
+
+	as.refreshTokens[token] = &RefreshToken{
+		Token:     token,
+		UserID:    userID,
+		ExpiresAt: expiresAt,
+		CreatedAt: time.Now(),
+	}
+}
+
+// Validate and consume refresh token
+func (as *AuthStore) validateRefreshToken(token string) (*RefreshToken, bool) {
+	as.mu.Lock()
+	defer as.mu.Unlock()
+
+	rt, exists := as.refreshTokens[token]
+	if !exists {
+		return nil, false
+	}
+
+	// Check if expired
+	if time.Now().After(rt.ExpiresAt) {
+		delete(as.refreshTokens, token)
+		return nil, false
+	}
+
+	return rt, true
+}
+
+// Revoke refresh token
+func (as *AuthStore) revokeRefreshToken(token string) {
+	as.mu.Lock()
+	defer as.mu.Unlock()
+
+	delete(as.refreshTokens, token)
 }
 
 // JWT Functions
@@ -270,6 +346,20 @@ func validateToken(tokenString string, authStore *AuthStore) (*Claims, error) {
 	return nil, errors.New("invalid token")
 }
 
+// Extract token from Authorization header
+func extractTokenFromHeader(authHeader string) (string, error) {
+	if authHeader == "" {
+		return "", errors.New("authorization header required")
+	}
+
+	parts := strings.Split(authHeader, " ")
+	if len(parts) != 2 || parts[0] != "Bearer" {
+		return "", errors.New("invalid authorization header format")
+	}
+
+	return parts[1], nil
+}
+
 // Password Functions
 
 // validatePasswordComplexity validates password complexity requirements
@@ -349,4 +439,22 @@ func generateSecurePassword(length int) string {
 	}
 
 	return string(password)
+}
+
+// Helper function to validate email format
+func validateEmail(email string) error {
+	if email == "" {
+		return errors.New("email is required")
+	}
+
+	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+	if !emailRegex.MatchString(email) {
+		return errors.New("invalid email format")
+	}
+
+	if len(email) > 254 {
+		return errors.New("email too long")
+	}
+
+	return nil
 }

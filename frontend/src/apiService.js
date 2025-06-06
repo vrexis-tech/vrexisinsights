@@ -270,6 +270,42 @@ class ApiService {
 
     return ws;
   }
+
+async getAlerts() {
+  return this.request('/alerts');
+}
+
+async createAlert(alertData) {
+  return this.request('/alerts', {
+    method: 'POST',
+    body: JSON.stringify(alertData),
+  });
+}
+
+async updateAlert(alertId, alertData) {
+  return this.request(`/alerts/${alertId}`, {
+    method: 'PUT',
+    body: JSON.stringify(alertData),
+  });
+}
+
+async deleteAlert(alertId) {
+  return this.request(`/alerts/${alertId}`, {
+    method: 'DELETE',
+  });
+}
+
+async getNotificationSettings() {
+  return this.request('/notifications/settings');
+}
+
+async updateNotificationSettings(settings) {
+  return this.request('/notifications/settings', {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  });
+}
+
 }
 
 // Create singleton instance
