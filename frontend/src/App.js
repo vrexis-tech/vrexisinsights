@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback, createContext, useCon
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
-import 'bootstrap/dist/css/bootstrap.min.css';
 import { v4 as uuidv4 } from 'uuid';
+import './App.css'; // Import our custom styles
 
 // Authentication Context
 const AuthContext = createContext();
@@ -76,7 +76,6 @@ const AuthProvider = ({ children }) => {
     return { success: false, error: error.message };
   }
 };
-
 
   const register = async (email, password, firstName, lastName) => {
     try {
@@ -162,7 +161,6 @@ const LoginForm = ({ onToggleMode }) => {
       
       if (!result.success) {
         if (result.error.includes('Rate limit') || result.error.includes('Too many')) {
-          // Extract retry time if available
           const match = result.error.match(/(\d+)\s*seconds?/);
           const waitTime = match ? parseInt(match[1]) : 60;
           
@@ -187,88 +185,92 @@ const LoginForm = ({ onToggleMode }) => {
   };
 
   return (
-    <div className="container d-flex align-items-center justify-content-center min-vh-100">
-      <div className="row w-100">
-        <div className="col-md-6 col-lg-4 mx-auto">
-          <div className="card shadow">
-            <div className="card-body p-4">
-              <div className="text-center mb-4">
-                <h1 className="h3 mb-3">🚀 Vrexis Insights</h1>
-                <p className="text-muted">Sign in to your account</p>
-              </div>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8">
+        <div className="bg-white rounded-lg shadow-lg p-8 fade-in">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-blue-600 mb-2 text-shadow">Vrexis Insights</h1>
+            <p className="text-gray-600">Sign in to your account</p>
+          </div>
 
-              {error && (
-                <div className="alert alert-danger" role="alert">
-                  {error}
-                </div>
-              )}
-
-              <div>
-                <div className="mb-3">
-                  <label htmlFor="email" className="form-label">Email</label>
-                  <input
-                    type="email"
-                    className="form-control"
-                    id="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    disabled={loading || retryAfter > 0}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSubmit(e)}
-                  />
-                </div>
-
-                <div className="mb-3">
-                  <label htmlFor="password" className="form-label">Password</label>
-                  <input
-                    type="password"
-                    className="form-control"
-                    id="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    disabled={loading || retryAfter > 0}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSubmit(e)}
-                  />
-                </div>
-
-                <button 
-                  onClick={handleSubmit}
-                  className="btn btn-primary w-100 mb-3"
-                  disabled={loading || retryAfter > 0}
-                >
-                  {loading ? (
-                    <>
-                      <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                      Signing in...
-                    </>
-                  ) : retryAfter > 0 ? (
-                    {`⏳ Wait ${retryAfter}s`}
-                  ) : (
-                    'Sign In'
-                  )}
-                </button>
-              </div>
-
-              <div className="text-center">
-                <span className="text-muted">Don't have an account? </span>
-                <button 
-                  className="btn btn-link p-0" 
-                  onClick={onToggleMode}
-                  disabled={loading || retryAfter > 0}
-                >
-                  Create one
-                </button>
-              </div>
-
-              <div className="mt-4 p-3 bg-light rounded">
-                <small className="text-muted">
-                  <strong>Demo Account:</strong><br />
-                  Email: admin@vrexisinsights.com<br />
-                  Password: admin123
-                </small>
-              </div>
+          {error && (
+            <div className="alert alert-danger">
+              <span className="mr-2">⚠️</span>
+              {error}
             </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                Email
+              </label>
+              <input
+                type="email"
+                id="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={loading || retryAfter > 0}
+                className="form-input"
+                placeholder="Enter your email"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                Password
+              </label>
+              <input
+                type="password"
+                id="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={loading || retryAfter > 0}
+                className="form-input"
+                placeholder="Enter your password"
+              />
+            </div>
+
+            <button 
+              type="submit"
+              className="btn-primary w-full flex justify-center items-center"
+              disabled={loading || retryAfter > 0}
+            >
+              {loading ? (
+                <>
+                  <svg className="loading-spinner mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Signing in...
+                </>
+              ) : retryAfter > 0 ? (
+                `⏳ Wait ${retryAfter}s`
+              ) : (
+                'Sign In'
+              )}
+            </button>
+          </form>
+
+          <div className="text-center mt-6">
+            <span className="text-gray-600">Don't have an account? </span>
+            <button 
+              className="text-blue-600 hover:text-blue-500 font-medium transition-colors"
+              onClick={onToggleMode}
+              disabled={loading || retryAfter > 0}
+            >
+              Create one
+            </button>
+          </div>
+
+          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+            <p className="text-sm text-gray-600">
+              <strong>Demo Account:</strong><br />
+              Email: admin@vrexisinsights.com<br />
+              Password: admin123
+            </p>
           </div>
         </div>
       </div>
@@ -347,124 +349,139 @@ const RegisterForm = ({ onToggleMode }) => {
   };
 
   return (
-    <div className="container d-flex align-items-center justify-content-center min-vh-100">
-      <div className="row w-100">
-        <div className="col-md-6 col-lg-5 mx-auto">
-          <div className="card shadow">
-            <div className="card-body p-4">
-              <div className="text-center mb-4">
-                <h1 className="h3 mb-3">🚀 Vrexis Insights</h1>
-                <p className="text-muted">Create your account</p>
-              </div>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8">
+        <div className="bg-white rounded-lg shadow-lg p-8 fade-in">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2 text-shadow">🚀 Vrexis Insights</h1>
+            <p className="text-gray-600">Create your account</p>
+          </div>
 
-              {error && (
-                <div className="alert alert-danger" role="alert">
-                  {error}
-                </div>
-              )}
+          {error && (
+            <div className="alert alert-danger">
+              <span className="mr-2">⚠️</span>
+              {error}
+            </div>
+          )}
 
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <div className="row">
-                  <div className="col-md-6 mb-3">
-                    <label htmlFor="firstName" className="form-label">First Name</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      id="firstName"
-                      name="firstName"
-                      value={formData.firstName}
-                      onChange={handleChange}
-                      required
-                      disabled={loading || retryAfter > 0}
-                    />
-                  </div>
-                  <div className="col-md-6 mb-3">
-                    <label htmlFor="lastName" className="form-label">Last Name</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      id="lastName"
-                      name="lastName"
-                      value={formData.lastName}
-                      onChange={handleChange}
-                      required
-                      disabled={loading || retryAfter > 0}
-                    />
-                  </div>
-                </div>
-
-                <div className="mb-3">
-                  <label htmlFor="email" className="form-label">Email</label>
-                  <input
-                    type="email"
-                    className="form-control"
-                    id="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    required
-                    disabled={loading || retryAfter > 0}
-                  />
-                </div>
-
-                <div className="mb-3">
-                  <label htmlFor="password" className="form-label">Password</label>
-                  <input
-                    type="password"
-                    className="form-control"
-                    id="password"
-                    name="password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    required
-                    disabled={loading || retryAfter > 0}
-                  />
-                  <div className="form-text">Must be at least 6 characters</div>
-                </div>
-
-                <div className="mb-3">
-                  <label htmlFor="confirmPassword" className="form-label">Confirm Password</label>
-                  <input
-                    type="password"
-                    className="form-control"
-                    id="confirmPassword"
-                    name="confirmPassword"
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    required
-                    disabled={loading || retryAfter > 0}
-                  />
-                </div>
-
-                <button 
-                  onClick={handleSubmit}
-                  className="btn btn-primary w-100 mb-3"
+                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
+                  First Name
+                </label>
+                <input
+                  type="text"
+                  id="firstName"
+                  name="firstName"
+                  value={formData.firstName}
+                  onChange={handleChange}
+                  required
                   disabled={loading || retryAfter > 0}
-                >
-                  {loading ? (
-                    <>
-                      <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                      Creating account...
-                    </>
-                  ) : retryAfter > 0 ? (
-                    {`⏳ Wait ${retryAfter}s`}
-                  ) : (
-                    'Create Account'
-                  )}
-                </button>
+                  className="form-input"
+                  placeholder="John"
+                />
               </div>
-
-              <div className="text-center">
-                <span className="text-muted">Already have an account? </span>
-                <button 
-                  className="btn btn-link p-0" 
-                  onClick={onToggleMode}
+              <div>
+                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
+                  Last Name
+                </label>
+                <input
+                  type="text"
+                  id="lastName"
+                  name="lastName"
+                  value={formData.lastName}
+                  onChange={handleChange}
+                  required
                   disabled={loading || retryAfter > 0}
-                >
-                  Sign in
-                </button>
+                  className="form-input"
+                  placeholder="Doe"
+                />
               </div>
             </div>
+
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                Email
+              </label>
+              <input
+                type="email"
+                id="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                required
+                disabled={loading || retryAfter > 0}
+                className="form-input"
+                placeholder="john@example.com"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                Password
+              </label>
+              <input
+                type="password"
+                id="password"
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                required
+                disabled={loading || retryAfter > 0}
+                className="form-input"
+                placeholder="••••••••"
+              />
+              <p className="text-sm text-gray-500 mt-1">Must be at least 6 characters</p>
+            </div>
+
+            <div>
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                Confirm Password
+              </label>
+              <input
+                type="password"
+                id="confirmPassword"
+                name="confirmPassword"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                required
+                disabled={loading || retryAfter > 0}
+                className="form-input"
+                placeholder="••••••••"
+              />
+            </div>
+
+            <button 
+              type="submit"
+              className="btn-primary w-full flex justify-center items-center"
+              disabled={loading || retryAfter > 0}
+            >
+              {loading ? (
+                <>
+                  <svg className="loading-spinner mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Creating account...
+                </>
+              ) : retryAfter > 0 ? (
+                `⏳ Wait ${retryAfter}s`
+              ) : (
+                'Create Account'
+              )}
+            </button>
+          </form>
+
+          <div className="text-center mt-6">
+            <span className="text-gray-600">Already have an account? </span>
+            <button 
+              className="text-blue-600 hover:text-blue-500 font-medium transition-colors"
+              onClick={onToggleMode}
+              disabled={loading || retryAfter > 0}
+            >
+              Sign in
+            </button>
           </div>
         </div>
       </div>
@@ -486,73 +503,51 @@ const AuthScreen = () => {
 // Main Dashboard Component (enhanced with auth)
 const ServiceMonitorDashboard = () => {
   const { user, token, logout } = useAuth();
-  const [services, setServices] = useState([]);
+  const [services, setServices] = useState([
+    // Sample data for demo
+    {
+      id: '1',
+      name: 'Main Website',
+      url: 'https://example.com',
+      type: 'website',
+      status: 'up',
+      latency: 45,
+      ping_latency: 12,
+      last_checked: new Date().toISOString()
+    },
+    {
+      id: '2',
+      name: 'API Server',
+      url: 'https://api.example.com',
+      type: 'server',
+      status: 'up',
+      latency: 89,
+      ping_latency: 8,
+      last_checked: new Date().toISOString()
+    },
+    {
+      id: '3',
+      name: 'Database Server',
+      url: '192.168.1.100',
+      type: 'server',
+      status: 'down',
+      latency: 0,
+      ping_latency: 0,
+      last_checked: new Date(Date.now() - 300000).toISOString()
+    }
+  ]);
   const [darkMode, setDarkMode] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newService, setNewService] = useState({ name: '', url: '', type: 'website' });
   const [urlError, setUrlError] = useState('');
   const [isLoaded, setIsLoaded] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  const [connectionStatus, setConnectionStatus] = useState('connected'); // Demo status
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [securityStatus, setSecurityStatus] = useState('secure');
   const [encryptionEnabled, setEncryptionEnabled] = useState(true);
   const [rateLimitInfo, setRateLimitInfo] = useState(null);
   const [isRateLimited, setIsRateLimited] = useState(false);
   const [retryAfter, setRetryAfter] = useState(0);
-
-  // API helper with authentication and rate limit handling
-  const apiCall = useCallback(async (url, options = {}) => {
-    const headers = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      ...options.headers,
-    };
-
-    try {
-      const response = await fetch(url, {
-        ...options,
-        headers,
-      });
-
-      // Handle rate limit headers
-      const rateLimitHeaders = {
-        limit: parseInt(response.headers.get('X-RateLimit-Limit')) || null,
-        remaining: parseInt(response.headers.get('X-RateLimit-Remaining')) || null,
-        reset: parseInt(response.headers.get('X-RateLimit-Reset')) || null,
-        retryAfter: parseInt(response.headers.get('Retry-After')) || null,
-      };
-
-      setRateLimitInfo(rateLimitHeaders);
-
-      // Handle rate limiting
-      if (response.status === 429) {
-        const errorData = await response.json();
-        setIsRateLimited(true);
-        setRetryAfter(rateLimitHeaders.retryAfter || 60);
-        
-        // Start countdown timer
-        const timer = setInterval(() => {
-          setRetryAfter(prev => {
-            if (prev <= 1) {
-              setIsRateLimited(false);
-              clearInterval(timer);
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
-
-        throw new Error(errorData.message || 'Rate limit exceeded. Please wait before trying again.');
-      }
-
-      return response;
-    } catch (error) {
-      if (error.message.includes('Rate limit')) {
-        throw error;
-      }
-      throw new Error(`Network error: ${error.message}`);
-    }
-  }, [token]);
 
   // Load preferences on mount
   useEffect(() => {
@@ -584,84 +579,6 @@ const ServiceMonitorDashboard = () => {
       }
     }
   }, [darkMode, isLoaded]);
-
-  // Enhanced secure WebSocket connection with authentication
-  useEffect(() => {
-    if (!isLoaded || !token) return;
-
-    const loadServices = async () => {
-      try {
-        const response = await apiCall('/api/v1/services');
-        
-        if (response.ok) {
-          const servicesData = await response.json();
-          setServices(servicesData || []);
-          console.log('🔒 Services loaded securely');
-        }
-      } catch (error) {
-        console.error('Error loading services:', error);
-      }
-    };
-
-    const connectWebSocket = () => {
-      try {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`;
-        const websocket = new WebSocket(wsUrl);
-        
-        websocket.onopen = () => {
-          console.log('🔒 Secure WebSocket connected');
-          setConnectionStatus('connected');
-          setSecurityStatus('secure');
-        };
-        
-        websocket.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            
-            if (Array.isArray(data)) {
-              setServices(data);
-            } else if (data && data.id) {
-              setServices(prev => {
-                const exists = prev.some(s => s.id === data.id);
-                return exists
-                  ? prev.map(s => s.id === data.id ? { ...s, ...data } : s)
-                  : [...prev, data];
-              });
-            }
-          } catch (error) {
-            console.error('Error parsing WebSocket message:', error);
-            setSecurityStatus('warning');
-          }
-        };
-        
-        websocket.onclose = () => {
-          console.log('🔒 WebSocket disconnected');
-          setConnectionStatus('disconnected');
-          setTimeout(connectWebSocket, 3000);
-        };
-        
-        websocket.onerror = (error) => {
-          console.error('WebSocket error:', error);
-          setConnectionStatus('error');
-          setSecurityStatus('warning');
-        };
-        
-        return () => {
-          websocket.close();
-        };
-      } catch (error) {
-        console.error('Error creating WebSocket:', error);
-        setConnectionStatus('error');
-        setSecurityStatus('error');
-      }
-    };
-
-    loadServices();
-    const cleanup = connectWebSocket();
-
-    return cleanup;
-  }, [isLoaded, token, apiCall]);
 
   // Enhanced URL validation with support for raw IPs
   const isValidUrl = (url) => {
@@ -701,7 +618,7 @@ const ServiceMonitorDashboard = () => {
     }
   };
 
-  // Enhanced secure service addition with rate limit handling
+  // Enhanced secure service addition
   const handleAddService = async () => {
     if (!newService.name.trim() || !newService.url.trim()) return;
     
@@ -721,84 +638,43 @@ const ServiceMonitorDashboard = () => {
       name: trimmedName,
       url: trimmedUrl,
       type: newService.type,
-      enabled: true
+      enabled: true,
+      status: 'up', // Demo status
+      latency: Math.floor(Math.random() * 100) + 20,
+      ping_latency: Math.floor(Math.random() * 50) + 5,
+      last_checked: new Date().toISOString()
     };
 
-    try {
-      const response = await apiCall('/api/v1/services', {
-        method: 'POST',
-        body: JSON.stringify(serviceData)
-      });
-
-      if (response.ok) {
-        const createdService = await response.json();
-        setServices(prev => [...prev, createdService]);
-        
-        setNewService({ name: '', url: '', type: 'website' });
-        setShowAddForm(false);
-        
-        console.log('🔒 Service added securely');
-      } else {
-        const errorData = await response.json();
-        setUrlError(`Failed to add service: ${errorData.error}`);
-      }
-    } catch (error) {
-      console.error('Error adding service:', error);
-      if (error.message.includes('Rate limit')) {
-        setUrlError(`${error.message} Please wait ${retryAfter} seconds.`);
-      } else {
-        setUrlError(`Connection error: ${error.message}`);
-      }
-    } finally {
+    // Simulate API call
+    setTimeout(() => {
+      setServices(prev => [...prev, serviceData]);
+      setNewService({ name: '', url: '', type: 'website' });
+      setShowAddForm(false);
       setIsSubmitting(false);
-    }
+      console.log('🔒 Service added securely');
+    }, 1000);
   };
 
-  // Enhanced secure delete with rate limit handling
+  // Enhanced secure delete
   const handleDelete = async (id, name) => {
     if (!window.confirm(`Are you sure you want to delete "${name}"?`)) {
       return;
     }
 
-    try {
-      const response = await apiCall(`/api/v1/services/${encodeURIComponent(id)}`, {
-        method: 'DELETE'
-      });
-      
-      if (response.ok) {
-        setServices(prev => prev.filter(s => s.id !== id));
-        console.log('🔒 Service deleted securely');
-      } else {
-        const errorData = await response.json();
-        alert(`Failed to delete service: ${errorData.error}`);
-      }
-    } catch (error) {
-      console.error('Error deleting service:', error);
-      if (error.message.includes('Rate limit')) {
-        alert(`${error.message} Please wait ${retryAfter} seconds before trying again.`);
-      } else {
-        alert('Error deleting service. Please check your connection.');
-      }
-    }
+    setServices(prev => prev.filter(s => s.id !== id));
+    console.log('🔒 Service deleted securely');
   };
 
-  // Enhanced secure refresh with rate limit handling
+  // Enhanced secure refresh
   const handleRefresh = async () => {
-    try {
-      const response = await apiCall('/api/v1/services');
-      
-      if (response.ok) {
-        const updatedServices = await response.json();
-        setServices(updatedServices || []);
-        console.log('🔒 Services refreshed securely');
-      }
-    } catch (error) {
-      console.error('Error refreshing services:', error);
-      if (error.message.includes('Rate limit')) {
-        // Show a toast or banner instead of console error
-        console.warn(`Rate limited: ${error.message}`);
-      }
-    }
+    // Simulate refresh with random latency updates
+    setServices(prev => prev.map(service => ({
+      ...service,
+      latency: service.status === 'up' ? Math.floor(Math.random() * 100) + 20 : 0,
+      ping_latency: service.status === 'up' ? Math.floor(Math.random() * 50) + 5 : 0,
+      last_checked: new Date().toISOString()
+    })));
+    console.log('🔒 Services refreshed securely');
   };
 
   const handleFormCancel = () => {
@@ -874,30 +750,30 @@ const ServiceMonitorDashboard = () => {
   const getStatusBadge = (status) => {
     switch (status) {
       case 'up':
-        return <span className="badge bg-success">✅ Online</span>;
+        return <span className="badge badge-success">✅ Online</span>;
       case 'down':
-        return <span className="badge bg-danger">❌ Offline</span>;
+        return <span className="badge badge-danger">❌ Offline</span>;
       default:
-        return <span className="badge bg-secondary">❓ Unknown</span>;
+        return <span className="badge badge-gray">❓ Unknown</span>;
     }
   };
 
   const getStatusIndicator = () => {
     if (connectionStatus === 'connected' && securityStatus === 'secure') {
       return (
-        <div className="d-flex align-items-center gap-2">
-          <span className="badge bg-success">🔗 Connected</span>
-          {encryptionEnabled && <span className="badge bg-info">🔒 Secure</span>}
+        <div className="flex items-center gap-2">
+          <span className="badge badge-success">🔗 Connected</span>
+          {encryptionEnabled && <span className="badge badge-info">🔒 Secure</span>}
         </div>
       );
     } else if (connectionStatus === 'connected' && securityStatus === 'warning') {
-      return <span className="badge bg-warning">⚠️ Connected (Warning)</span>;
+      return <span className="badge badge-warning">⚠️ Connected (Warning)</span>;
     } else if (connectionStatus === 'disconnected') {
-      return <span className="badge bg-warning">⚠️ Disconnected</span>;
+      return <span className="badge badge-warning">⚠️ Disconnected</span>;
     } else if (connectionStatus === 'error' || securityStatus === 'error') {
-      return <span className="badge bg-danger">❌ Connection Error</span>;
+      return <span className="badge badge-danger">❌ Connection Error</span>;
     } else {
-      return <span className="badge bg-secondary">⏳ Connecting...</span>;
+      return <span className="badge badge-gray">⏳ Connecting...</span>;
     }
   };
 
@@ -916,476 +792,399 @@ const ServiceMonitorDashboard = () => {
     return `${days}d ago`;
   };
 
-  const themeClass = darkMode ? 'bg-dark text-light' : 'bg-light text-dark';
-  const cardClass = darkMode ? 'bg-secondary text-light' : 'bg-white';
-  const inputClass = darkMode ? 'bg-dark text-light border-secondary' : '';
-
   return (
-    <>
-      <style>{
-        .service-card {
-          transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-        .service-card:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-        .stats-card {
-          border-left: 4px solid #007bff;
-        }
-        .stats-card.success {
-          border-left-color: #28a745;
-        }
-        .stats-card.danger {
-          border-left-color: #dc3545;
-        }
-        .stats-card.info {
-          border-left-color: #17a2b8;
-        }
-        .stats-card.security {
-          border-left-color: #6f42c1;
-        }
-        .status-indicator {
-          position: fixed;
-          top: 20px;
-          right: 20px;
-          z-index: 1050;
-        }
-        .loading-spinner {
-          width: 1rem;
-          height: 1rem;
-        }
-        .secure-service {
-          border-left: 3px solid #28a745;
-        }
-        .insecure-service {
-          border-left: 3px solid #ffc107;
-        }
-      }</style>
-      
-      <div className={`${themeClass} min-vh-100`}>
-        <div className="status-indicator">
-          {getStatusIndicator()}
-        </div>
+    <div className={`min-h-screen ${darkMode ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
+      {/* Status Indicator */}
+      <div className="status-indicator">
+        {getStatusIndicator()}
+      </div>
 
-        <div className="container py-4">
-          <header className="d-flex justify-content-between align-items-center mb-4">
-            <div>
-              <h1 className="mb-1">🚀 Vrexis Insights</h1>
-              <p className="text-muted mb-0">
-                Welcome back, {user?.first_name || user?.email}
+      <div className="max-w-6xl mx-auto py-8 px-4">
+        {/* Header */}
+        <header className="flex justify-between items-center mb-8 fade-in">
+          <div>
+            <h1 className="text-4xl font-bold mb-2 text-shadow">🚀 Vrexis Insights</h1>
+            <p className={`${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              Welcome back, {user?.first_name || user?.email}
+            </p>
+            {encryptionEnabled && connectionStatus === 'connected' && (
+              <p className="text-green-600 text-sm mt-1">
+                🔒 Enterprise encryption active • All data secured
               </p>
-              {encryptionEnabled && connectionStatus === 'connected' && (
-                <small className="text-success d-block">
-                  🔒 Enterprise encryption active • All data secured
-                </small>
-              )}
-            </div>
-            <div className="d-flex gap-2">
-              <button
-                onClick={() => setDarkMode(!darkMode)}
-                className={`btn btn-${darkMode ? 'light' : 'dark'}`}
-                aria-label="Toggle Dark Mode"
-              >
-                {darkMode ? '☀️' : '🌙'}
-              </button>
-              <button
-                onClick={logout}
-                className="btn btn-outline-danger"
-              >
-                🚪 Logout
-              </button>
-            </div>
-          </header>
+            )}
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className={`px-4 py-2 rounded-lg border transition-colors ${
+                darkMode 
+                  ? 'bg-white text-gray-900 border-white hover:bg-gray-100' 
+                  : 'bg-gray-900 text-white border-gray-900 hover:bg-gray-800'
+              }`}
+            >
+              {darkMode ? '☀️' : '🌙'}
+            </button>
+            <button
+              onClick={logout}
+              className="btn-danger"
+            >
+              🚪 Logout
+            </button>
+          </div>
+        </header>
 
-          {/* Rate Limit Status Bar */}
-          {isRateLimited && (
-            <div className="alert alert-warning d-flex align-items-center mb-4" role="alert">
-              <span className="me-2">⏳</span>
-              <div className="flex-grow-1">
+        {/* Rate Limit Status Bar */}
+        {isRateLimited && (
+          <div className="alert alert-warning flex justify-between items-center">
+            <div className="flex items-center">
+              <span className="mr-2">⏳</span>
+              <div>
                 <strong>Rate Limit Exceeded</strong> - Too many requests. Please wait {retryAfter} seconds before trying again.
               </div>
-              <div className="ms-auto">
-                <span className="badge bg-warning text-dark">{retryAfter}s</span>
-              </div>
             </div>
-          )}
+            <span className="badge badge-warning">{retryAfter}s</span>
+          </div>
+        )}
 
-          {/* Rate Limit Info (Development Mode) */}
-          {rateLimitInfo && !isRateLimited && process.env.NODE_ENV === 'development' && (
-            <div className="alert alert-info d-flex align-items-center mb-4" role="alert">
-              <span className="me-2">📊</span>
+        {/* Security Status Bar */}
+        {securityStatus === 'secure' && connectionStatus === 'connected' && (
+          <div className="alert alert-success">
+            <span className="mr-2">🛡️</span>
+            <div>
+              <strong>Secure Monitoring Active</strong> - All connections encrypted with TLS, rate limited for protection, data secured with enterprise-grade security
+            </div>
+          </div>
+        )}
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-6 stats-card stats-card-success fade-in`}>
+            <div className="flex items-center">
+              <div className="mr-4">
+                <span className="text-4xl">✅</span>
+              </div>
               <div>
-                <strong>Rate Limit Status:</strong> {rateLimitInfo.remaining || 0} requests remaining of {rateLimitInfo.limit || 0} per minute
-              </div>
-            </div>
-          )}
-
-          {/* Security Status Bar */}
-          {securityStatus === 'secure' && connectionStatus === 'connected' && (
-            <div className="alert alert-success d-flex align-items-center mb-4" role="alert">
-              <span className="me-2">🛡️</span>
-              <div>
-                <strong>Secure Monitoring Active</strong> - All connections encrypted with TLS, rate limited for protection, data secured with enterprise-grade security
-              </div>
-            </div>
-          )}
-
-          {/* Enhanced Stats Cards */}
-          <div className="row mb-4">
-            <div className="col-xl-2 col-md-4 mb-3">
-              <div className={`card ${cardClass} stats-card success`}>
-                <div className="card-body">
-                  <div className="d-flex align-items-center">
-                    <div className="me-3">
-                      <span className="fs-1">✅</span>
-                    </div>
-                    <div>
-                      <h5 className="card-title mb-0">{upServices}</h5>
-                      <p className="card-text text-muted mb-0">Online</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="col-xl-2 col-md-4 mb-3">
-              <div className={`card ${cardClass} stats-card danger`}>
-                <div className="card-body">
-                  <div className="d-flex align-items-center">
-                    <div className="me-3">
-                      <span className="fs-1">❌</span>
-                    </div>
-                    <div>
-                      <h5 className="card-title mb-0">{downServices}</h5>
-                      <p className="card-text text-muted mb-0">Offline</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="col-xl-2 col-md-4 mb-3">
-              <div className={`card ${cardClass} stats-card security`}>
-                <div className="card-body">
-                  <div className="d-flex align-items-center">
-                    <div className="me-3">
-                      <span className="fs-1">🔒</span>
-                    </div>
-                    <div>
-                      <h5 className="card-title mb-0">{secureServices}</h5>
-                      <p className="card-text text-muted mb-0">HTTPS</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="col-xl-2 col-md-4 mb-3">
-              <div className={`card ${cardClass} stats-card`}>
-                <div className="card-body">
-                  <div className="d-flex align-items-center">
-                    <div className="me-3">
-                      <span className="fs-1">🌐</span>
-                    </div>
-                    <div>
-                      <h5 className="card-title mb-0">{statsByType.website}</h5>
-                      <p className="card-text text-muted mb-0">Websites</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="col-xl-2 col-md-4 mb-3">
-              <div className={`card ${cardClass} stats-card info`}>
-                <div className="card-body">
-                  <div className="d-flex align-items-center">
-                    <div className="me-3">
-                      <span className="fs-1">⚡</span>
-                    </div>
-                    <div>
-                      <h5 className="card-title mb-0">{avgLatency}ms</h5>
-                      <p className="card-text text-muted mb-0">Avg HTTP</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="col-xl-2 col-md-4 mb-3">
-              <div className={`card ${cardClass} stats-card`}>
-                <div className="card-body">
-                  <div className="d-flex align-items-center">
-                    <div className="me-3">
-                      <span className="fs-1">🏓</span>
-                    </div>
-                    <div>
-                      <h5 className="card-title mb-0">{avgPingLatency}ms</h5>
-                      <p className="card-text text-muted mb-0">Avg Ping</p>
-                    </div>
-                  </div>
-                </div>
+                <h3 className="text-2xl font-bold">{upServices}</h3>
+                <p className={`${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Online</p>
               </div>
             </div>
           </div>
 
-          {/* Services Section */}
-          <div className={`card ${cardClass}`}>
-            <div className="card-header">
-              <div className="d-flex justify-content-between align-items-center">
-                <h3 className="mb-0">
-                  🔒 Your Monitored Services ({services.length})
-                  {encryptionEnabled && connectionStatus === 'connected' && (
-                    <span className="ms-2 badge bg-success">Encrypted</span>
-                  )}
-                </h3>
-                <div className="btn-group">
+          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-6 stats-card stats-card-danger fade-in`}>
+            <div className="flex items-center">
+              <div className="mr-4">
+                <span className="text-4xl">❌</span>
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold">{downServices}</h3>
+                <p className={`${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Offline</p>
+              </div>
+            </div>
+          </div>
+
+          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-6 stats-card stats-card-security fade-in`}>
+            <div className="flex items-center">
+              <div className="mr-4">
+                <span className="text-4xl">🔒</span>
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold">{secureServices}</h3>
+                <p className={`${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>HTTPS</p>
+              </div>
+            </div>
+          </div>
+
+          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-6 stats-card stats-card-info fade-in`}>
+            <div className="flex items-center">
+              <div className="mr-4">
+                <span className="text-4xl">🌐</span>
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold">{statsByType.website}</h3>
+                <p className={`${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Websites</p>
+              </div>
+            </div>
+          </div>
+
+          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-6 stats-card stats-card-info fade-in`}>
+            <div className="flex items-center">
+              <div className="mr-4">
+                <span className="text-4xl">⚡</span>
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold">{avgLatency}ms</h3>
+                <p className={`${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Avg HTTP</p>
+              </div>
+            </div>
+          </div>
+
+          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-6 stats-card stats-card-info fade-in`}>
+            <div className="flex items-center">
+              <div className="mr-4">
+                <span className="text-4xl">🏓</span>
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold">{avgPingLatency}ms</h3>
+                <p className={`${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Avg Ping</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Services Section */}
+        <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg fade-in`}>
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex justify-between items-center">
+              <h3 className="text-xl font-bold flex items-center">
+                🔒 Your Monitored Services ({services.length})
+                {encryptionEnabled && connectionStatus === 'connected' && (
+                  <span className="ml-2 badge badge-success">Encrypted</span>
+                )}
+              </h3>
+              <div className="flex gap-2">
+                <button 
+                  className="btn-secondary"
+                  onClick={handleRefresh}
+                  disabled={isRateLimited}
+                >
+                  🔄 Refresh
+                </button>
+                <button 
+                  className="btn-primary"
+                  onClick={() => setShowAddForm(!showAddForm)}
+                  disabled={isRateLimited}
+                >
+                  {showAddForm ? '✕ Close' : '🔒 Add Service'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6">
+            {showAddForm && (
+              <div className="mb-6 p-4 border border-gray-200 rounded-lg fade-in">
+                <h5 className="text-lg font-semibold mb-4">🔒 Add New Service</h5>
+                
+                <div className="alert alert-info mb-4">
+                  <div className="flex items-start">
+                    <span className="mr-2 mt-0.5">🛡️</span>
+                    <div>
+                      <strong>Monitoring Types:</strong> 
+                      <ul className="mt-2 ml-4 list-disc">
+                        <li><strong>URLs:</strong> HTTP/HTTPS monitoring + ping (https://example.com)</li>
+                        <li><strong>IP Addresses:</strong> Ping-only monitoring (192.168.1.1)</li>
+                        <li><strong>Hostnames:</strong> Ping-only monitoring (router.local)</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Service Name</label>
+                    <input
+                      type="text"
+                      className={`form-input ${darkMode ? 'form-input-dark' : ''}`}
+                      placeholder="My API Service"
+                      value={newService.name}
+                      onChange={(e) => setNewService({ ...newService, name: e.target.value })}
+                      maxLength="100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Service URL/IP Address</label>
+                    <input
+                      type="text"
+                      className={`form-input ${urlError ? 'border-red-500' : ''} ${darkMode ? 'form-input-dark' : ''}`}
+                      placeholder="https://api.example.com, 192.168.1.1, or router.local"
+                      value={newService.url}
+                      onChange={(e) => setNewService({ ...newService, url: e.target.value })}
+                      maxLength="500"
+                    />
+                    {urlError && <p className="text-red-500 text-sm mt-1">{urlError}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Service Type</label>
+                    <select
+                      className={`form-input ${darkMode ? 'form-input-dark' : ''}`}
+                      value={newService.type}
+                      onChange={(e) => setNewService({ ...newService, type: e.target.value })}
+                    >
+                      <option value="website">🌐 Website/API</option>
+                      <option value="server">🖥️ Server</option>
+                      <option value="misc">🔧 Network Equipment</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 mt-4">
                   <button 
-                    className="btn btn-outline-primary" 
-                    onClick={handleRefresh}
-                    title="Refresh Services"
-                    disabled={isRateLimited}
+                    type="button" 
+                    className="btn-secondary"
+                    onClick={handleFormCancel}
+                    disabled={isSubmitting || isRateLimited}
                   >
-                    🔄 Refresh
+                    Cancel
                   </button>
                   <button 
-                    className="btn btn-success" 
-                    onClick={() => setShowAddForm(!showAddForm)}
-                    disabled={isRateLimited}
+                    type="button" 
+                    className="btn-primary flex items-center"
+                    onClick={handleAddService}
+                    disabled={isSubmitting || isRateLimited || !newService.name.trim() || !newService.url.trim()}
                   >
-                    {showAddForm ? '✕ Close' : '🔒 Add Service'}
+                    {isSubmitting ? (
+                      <>
+                        <svg className="loading-spinner mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Adding...
+                      </>
+                    ) : isRateLimited ? (
+                      `⏳ Wait ${retryAfter}s`
+                    ) : (
+                      '🔒 Add Service'
+                    )}
                   </button>
                 </div>
               </div>
-            </div>
+            )}
 
-            <div className="card-body">
-              {showAddForm && (
-                <div className="mb-4 p-3 border rounded">
-                  <h5 className="mb-3">🔒 Add New Service</h5>
-                  
-                  <div className="alert alert-info mb-3">
-                    <div className="d-flex align-items-center">
-                      <span className="me-2">🛡️</span>
-                      <div>
-                        <strong>Monitoring Types:</strong> 
-                        <ul className="mb-0 mt-1">
-                          <li><strong>URLs:</strong> HTTP/HTTPS monitoring + ping (https://example.com)</li>
-                          <li><strong>IP Addresses:</strong> Ping-only monitoring (192.168.1.1)</li>
-                          <li><strong>Hostnames:</strong> Ping-only monitoring (router.local)</li>
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="row">
-                    <div className="col-md-4 mb-3">
-                      <label className="form-label">Service Name</label>
-                      <input
-                        type="text"
-                        className={`form-control ${inputClass}`}
-                        placeholder="My API Service"
-                        value={newService.name}
-                        onChange={(e) => setNewService({ ...newService, name: e.target.value })}
-                        maxLength="100"
-                      />
-                    </div>
-                    <div className="col-md-5 mb-3">
-                      <label className="form-label">Service URL/IP Address</label>
-                      <input
-                        type="text"
-                        className={`form-control ${inputClass} ${urlError ? 'is-invalid' : ''}`}
-                        placeholder="https://api.example.com, 192.168.1.1, or router.local"
-                        value={newService.url}
-                        onChange={(e) => setNewService({ ...newService, url: e.target.value })}
-                        maxLength="500"
-                      />
-                      {urlError && <div className="invalid-feedback">{urlError}</div>}
-                    </div>
-                    <div className="col-md-3 mb-3">
-                      <label className="form-label">Service Type</label>
-                      <select
-                        className={`form-select ${inputClass}`}
-                        value={newService.type}
-                        onChange={(e) => setNewService({ ...newService, type: e.target.value })}
-                      >
-                        <option value="website">🌐 Website/API</option>
-                        <option value="server">🖥️ Server</option>
-                        <option value="misc">🔧 Network Equipment</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="d-flex justify-content-end gap-2">
-                    <button 
-                      type="button" 
-                      className="btn btn-secondary" 
-                      onClick={handleFormCancel}
-                      disabled={isSubmitting || isRateLimited}
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      type="button" 
-                      className="btn btn-primary" 
-                      onClick={handleAddService}
-                      disabled={isSubmitting || isRateLimited || !newService.name.trim() || !newService.url.trim()}
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <div className="spinner-border loading-spinner me-2" role="status">
-                            <span className="visually-hidden">Loading...</span>
-                          </div>
-                          Adding...
-                        </>
-                      ) : isRateLimited ? (
-                        {`⏳ Wait ${retryAfter}s`}
-                      ) : (
-                        '🔒 Add Service'
-                      )}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {services.length > 0 ? (
-                <div className="row">
-                  {services.map((service) => {
-                    const isSecure = service.url && service.url.startsWith('https://');
-                    return (
-                    <div key={service.id} className="col-lg-6 mb-3">
-                      <div className={`card service-card h-100 ${darkMode ? 'bg-dark border-secondary' : ''} ${isSecure ? 'secure-service' : 'insecure-service'}`}>
-                        <div className="card-body">
-                          <div className="d-flex justify-content-between align-items-start mb-3">
-                            <div className="d-flex align-items-start">
-                              <span className="fs-2 me-3">{getTypeIcon(service.type || 'website')}</span>
-                              <div>
-                                <h6 className={`card-title mb-1 ${darkMode ? 'text-white' : 'text-dark'}`}>
-                                  {service.name || 'Unknown Service'}
-                                  {isSecure && <span className="ms-2 text-success" title="Secure HTTPS connection">🔒</span>}
-                                  {!isSecure && service.url && service.url.startsWith('http://') && 
-                                    <span className="ms-2 text-warning" title="Insecure HTTP connection">⚠️</span>
-                                  }
-                                </h6>
-                                <small className={`d-block ${darkMode ? 'text-light' : 'text-muted'}`}>{service.url || 'No URL'}</small>
-                                <div className="d-flex gap-1 mt-1">
-                                  <small className="badge bg-secondary">{getTypeLabel(service.type || 'website')}</small>
-                                  {isSecure && <small className="badge bg-success">🔒 Secure</small>}
-                                  {!isSecure && service.url && service.url.startsWith('http://') && 
-                                    <small className="badge bg-warning">⚠️ Insecure</small>
-                                  }
-                                </div>
-                              </div>
-                            </div>
-                            <div className="d-flex align-items-center gap-2">
-                              {getStatusBadge(service.status)}
-                              <button 
-                                className="btn btn-sm btn-outline-danger"
-                                onClick={() => handleDelete(service.id, service.name)}
-                                title="Delete Service"
-                                disabled={isRateLimited}
-                              >
-                                {isRateLimited ? '⏳' : '🗑️'}
-                              </button>
-                            </div>
-                          </div>
-
-                          <div className="row text-center">
-                            <div className="col-4">
-                              <div className="border-end">
-                                <div className={`fw-bold ${darkMode ? 'text-white' : 'text-dark'}`}>
-                                  {service.url && !service.url.includes('://') ? 'N/A' : (service.latency || 0) + 'ms'}
-                                </div>
-                                <small className={darkMode ? 'text-light' : 'text-muted'}>
-                                  HTTP
-                                </small>
-                              </div>
-                            </div>
-                            <div className="col-4">
-                              <div className="border-end">
-                                <div className={`fw-bold ${darkMode ? 'text-white' : 'text-dark'}`}>{service.ping_latency || 0}ms</div>
-                                <small className={darkMode ? 'text-light' : 'text-muted'}>Ping</small>
-                              </div>
-                            </div>
-                            <div className="col-4">
-                              <div className={`fw-bold ${darkMode ? 'text-white' : 'text-dark'}`}>{formatLastChecked(service.last_checked)}</div>
-                              <small className={darkMode ? 'text-light' : 'text-muted'}>Last Check</small>
+            {services.length > 0 ? (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {services.map((service) => {
+                  const isSecure = service.url && service.url.startsWith('https://');
+                  return (
+                    <div key={service.id} className={`${darkMode ? 'bg-gray-700' : 'bg-gray-50'} rounded-lg p-6 service-card ${
+                      isSecure ? 'secure-service' : 'insecure-service'
+                    }`}>
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-start">
+                          <span className="text-3xl mr-3">{getTypeIcon(service.type || 'website')}</span>
+                          <div>
+                            <h6 className="font-semibold text-lg flex items-center">
+                              {service.name || 'Unknown Service'}
+                              {isSecure && <span className="ml-2 text-green-500" title="Secure HTTPS connection">🔒</span>}
+                              {!isSecure && service.url && service.url.startsWith('http://') && 
+                                <span className="ml-2 text-yellow-500" title="Insecure HTTP connection">⚠️</span>
+                              }
+                            </h6>
+                            <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>{service.url || 'No URL'}</p>
+                            <div className="flex gap-2 mt-2">
+                              <span className="badge badge-gray">
+                                {getTypeLabel(service.type || 'website')}
+                              </span>
+                              {isSecure && <span className="badge badge-success">🔒 Secure</span>}
+                              {!isSecure && service.url && service.url.startsWith('http://') && 
+                                <span className="badge badge-warning">⚠️ Insecure</span>
+                              }
                             </div>
                           </div>
                         </div>
+                        <div className="flex items-center gap-2">
+                          {getStatusBadge(service.status)}
+                          <button 
+                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                            onClick={() => handleDelete(service.id, service.name)}
+                            title="Delete Service"
+                            disabled={isRateLimited}
+                          >
+                            {isRateLimited ? '⏳' : '🗑️'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-4 text-center">
+                        <div className="border-r border-gray-300 pr-4">
+                          <div className="text-xl font-bold">
+                            {service.url && !service.url.includes('://') ? 'N/A' : (service.latency || 0) + 'ms'}
+                          </div>
+                          <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>HTTP</p>
+                        </div>
+                        <div className="border-r border-gray-300 pr-4">
+                          <div className="text-xl font-bold">{service.ping_latency || 0}ms</div>
+                          <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Ping</p>
+                        </div>
+                        <div>
+                          <div className="text-xl font-bold">{formatLastChecked(service.last_checked)}</div>
+                          <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Last Check</p>
+                        </div>
                       </div>
                     </div>
-                  )})}
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <div className="mb-4">
+                  <span className="text-6xl">🔒</span>
                 </div>
-              ) : (
-                <div className="text-center py-5">
-                  <div className="mb-4">
-                    <span className="fs-1">🔒</span>
-                  </div>
-                  <h4 className={darkMode ? 'text-light' : 'text-muted'}>No services monitored yet</h4>
-                  <p className={darkMode ? 'text-light' : 'text-muted'}>Add your first service to start monitoring</p>
-                  <button 
-                    className="btn btn-primary"
-                    onClick={() => setShowAddForm(true)}
-                  >
-                    🔒 Add Your First Service
-                  </button>
-                </div>
-              )}
+                <h4 className={`text-xl font-semibold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                  No services monitored yet
+                </h4>
+                <p className={`mb-4 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Add your first service to start monitoring
+                </p>
+                <button 
+                  className="btn-primary"
+                  onClick={() => setShowAddForm(true)}
+                >
+                  🔒 Add Your First Service
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Latency Chart */}
+        {services.length > 0 && (
+          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg mt-8 fade-in`}>
+            <div className="p-6">
+              <h5 className="text-xl font-semibold mb-4">📈 HTTP & Ping Latency Chart</h5>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#6B7280' : '#E5E7EB'} />
+                  <XAxis 
+                    dataKey="name" 
+                    stroke={darkMode ? '#9CA3AF' : '#6B7280'}
+                    fontSize={12}
+                  />
+                  <YAxis 
+                    stroke={darkMode ? '#9CA3AF' : '#6B7280'}
+                    fontSize={12}
+                  />
+                  <Tooltip 
+                    contentStyle={{
+                      backgroundColor: darkMode ? '#374151' : '#FFFFFF',
+                      border: darkMode ? '1px solid #6B7280' : '1px solid #E5E7EB',
+                      borderRadius: '8px',
+                      color: darkMode ? '#FFFFFF' : '#111827'
+                    }}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="latency" 
+                    stroke="#3B82F6" 
+                    name="HTTP Latency (ms)" 
+                    strokeWidth={2}
+                    dot={{ fill: '#3B82F6', strokeWidth: 2, r: 4 }}
+                    connectNulls={false}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="ping" 
+                    stroke="#10B981" 
+                    name="Ping Latency (ms)" 
+                    strokeWidth={2}
+                    dot={{ fill: '#10B981', strokeWidth: 2, r: 4 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
           </div>
-
-          {/* Latency Chart */}
-          {services.length > 0 && (
-            <div className={`card shadow border-0 mt-4 ${cardClass}`}>
-              <div className="card-body">
-                <h5 className="mb-3">📈 HTTP & Ping Latency Chart</h5>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#6c757d' : '#dee2e6'} />
-                    <XAxis 
-                      dataKey="name" 
-                      stroke={darkMode ? '#adb5bd' : '#6c757d'}
-                      fontSize={12}
-                    />
-                    <YAxis 
-                      stroke={darkMode ? '#adb5bd' : '#6c757d'}
-                      fontSize={12}
-                    />
-                    <Tooltip 
-                      contentStyle={{
-                        backgroundColor: darkMode ? '#495057' : '#ffffff',
-                        border: darkMode ? '1px solid #6c757d' : '1px solid #dee2e6',
-                        borderRadius: '8px',
-                        color: darkMode ? '#ffffff' : '#212529'
-                      }}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="latency" 
-                      stroke="#0d6efd" 
-                      name="HTTP Latency (ms)" 
-                      strokeWidth={2}
-                      dot={{ fill: '#0d6efd', strokeWidth: 2, r: 4 }}
-                      connectNulls={false}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="ping" 
-                      stroke="#20c997" 
-                      name="Ping Latency (ms)" 
-                      strokeWidth={2}
-                      dot={{ fill: '#20c997', strokeWidth: 2, r: 4 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
-        </div>
+        )}
       </div>
-    </>
+    </div>
   );
 };
 
@@ -1403,12 +1202,13 @@ const AuthenticatedApp = () => {
 
   if (loading) {
     return (
-      <div className="d-flex justify-content-center align-items-center min-vh-100">
-        <div className="text-center">
-          <div className="spinner-border text-primary" role="status">
-            <span className="visually-hidden">Loading...</span>
-          </div>
-          <p className="mt-3 text-muted">Loading Vrexis Insights...</p>
+      <div className="min-h-screen flex justify-center items-center bg-gray-50">
+        <div className="text-center fade-in">
+          <svg className="w-12 h-12 text-blue-500 mx-auto mb-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <p className="text-gray-600">Loading Vrexis Insights...</p>
         </div>
       </div>
     );

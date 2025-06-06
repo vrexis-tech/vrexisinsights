@@ -2,501 +2,94 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"github.com/rs/cors"
+	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
 )
 
-// Constants
-const (
-	defaultPort             = "8080"
-	defaultDBPath           = "secure_services.db"
-	jwtExpirationHours      = 1
-	refreshExpirationDays   = 7
-	maxRequestSize          = 1024 * 1024 // 1MB
-	pingTimeout             = 5 * time.Second
-	httpTimeout             = 10 * time.Second
-	monitorInterval         = 30 * time.Second
-	concurrentChecks        = 10
-	alertEvaluationInterval = 30 * time.Second // Alert evaluation interval
-)
-
-// Server represents the main application server
-type Server struct {
-	config      *Config
-	db          *sql.DB
-	router      *mux.Router
-	httpServer  *http.Server
-	stores      *Stores
-	services    *Services
-	monitor     *Monitor
-	alertEngine *AlertEngine
-	startTime   time.Time
-}
-
-// Config holds all application configuration
+// Config struct holds configuration values
 type Config struct {
-	Port        string
-	DBPath      string
-	Security    SecurityConfig
-	EnableHTTPS bool
-	TLSCertFile string
-	TLSKeyFile  string
-	Alerts      AlertConfig
+	DBPath string
+	Port   string
+	JWTKey string
 }
 
-// AlertConfig contains alert-related settings
-type AlertConfig struct {
-	EvaluationInterval         time.Duration
-	MaxNotificationsPerHour    int
-	EnableEmailNotifications   bool
-	EnableSMSNotifications     bool
-	EnableSlackNotifications   bool
-	EnableWebhookNotifications bool
+// User struct for user authentication
+type User struct {
+	ID        string `json:"id"`
+	Email     string `json:"email"`
+	Password  string `json:"password,omitempty"` // omitempty to not send password in responses
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
 }
 
-// SecurityConfig contains security-related settings
-type SecurityConfig struct {
-	MaxRequestSize     int64
-	AllowedOrigins     []string
-	RateLimit          RateLimitConfig
-	Auth               AuthConfig
-	DatabaseEncryption bool
-	EncryptionKey      []byte
+// Service struct for monitoring services
+type Service struct {
+	ID          string    `json:"id"`
+	UserID      string    `json:"user_id"`
+	Name        string    `json:"name"`
+	URL         string    `json:"url"`
+	Type        string    `json:"type"`
+	Status      string    `json:"status"`
+	Latency     int       `json:"latency"`
+	PingLatency int       `json:"ping_latency"`
+	LastChecked time.Time `json:"last_checked"`
 }
 
-// RateLimitConfig defines rate limiting parameters
-type RateLimitConfig struct {
-	RPM                 int
-	Burst               int
-	AuthRPM             int
-	AuthBurst           int
-	WSConnections       int
-	EnableLogging       bool
-	SuspiciousThreshold int
+// Credentials struct for login
+type Credentials struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
-// AuthConfig defines authentication parameters
-type AuthConfig struct {
-	MaxLoginAttempts   int
-	LockoutDuration    time.Duration
-	PasswordMinLength  int
-	RequireComplexity  bool
-	TokenRotationHours int
+// Registration struct
+type Registration struct {
+	Email     string `json:"email"`
+	Password  string `json:"password"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
 }
 
-// Stores aggregates all data stores
-type Stores struct {
-	User         *UserStore
-	Service      *ServiceStore
-	Auth         *AuthStore
-	Alert        *AlertStore
-	Notification *NotificationStore
+// Response structs
+type AuthResponse struct {
+	Token string `json:"token"`
+	User  User   `json:"user"`
 }
 
-// Services aggregates all services
-type Services struct {
-	RateLimiter *RateLimiter
-	Monitor     *SecurityMonitor
-	Clients     *ClientManager
+type ErrorResponse struct {
+	Error string `json:"error"`
 }
 
-// Initialize creates a new server instance
-func Initialize() (*Server, error) {
-	config := loadConfig()
+// Global database variable
+var globalDB *sql.DB
 
-	// Initialize JWT secrets
-	if err := initJWT(); err != nil {
-		return nil, fmt.Errorf("failed to initialize JWT: %w", err)
-	}
+// Load configuration from environment variables
+func loadConfig() (*Config, error) {
+	port := getEnv("PORT", "8080")
+	dbPath := getEnv("DB_PATH", "secure_services.db")
+	jwtKey := getEnv("JWT_KEY", "your-secret-key-change-this")
 
-	// Initialize security monitor
-	monitor := NewSecurityMonitor()
-
-	// Open database
-	db, err := openDatabase(config.DBPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
-	}
-
-	// Initialize database schema
-	if err := initializeDatabase(db); err != nil {
-		return nil, fmt.Errorf("failed to initialize database schema: %w", err)
-	}
-
-	// Initialize stores
-	userStore, err := NewUserStore(db, monitor)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize user store: %w", err)
-	}
-
-	serviceStore, err := NewServiceStore(db, monitor)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize service store: %w", err)
-	}
-
-	// Initialize alert-related stores
-	alertStore, err := NewAlertStore(db, monitor)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize alert store: %w", err)
-	}
-
-	notificationStore, err := NewNotificationStore(db, monitor)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize notification store: %w", err)
-	}
-
-	stores := &Stores{
-		User:         userStore,
-		Service:      serviceStore,
-		Auth:         userStore.authStore,
-		Alert:        alertStore,
-		Notification: notificationStore,
-	}
-
-	// Initialize services
-	rateLimiter := NewRateLimiter(config.Security.RateLimit, monitor)
-	clients := NewClientManager(monitor)
-
-	services := &Services{
-		RateLimiter: rateLimiter,
-		Monitor:     monitor,
-		Clients:     clients,
-	}
-
-	// Create server
-	server := &Server{
-		config:   config,
-		db:       db,
-		stores:   stores,
-		services: services,
-	}
-
-	// Setup routes
-	server.setupRoutes()
-
-	// Configure HTTP server
-	server.httpServer = &http.Server{
-		Addr:              ":" + config.Port,
-		Handler:           server.buildMiddlewareStack(),
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      15 * time.Second,
-		IdleTimeout:       60 * time.Second,
-		ReadHeaderTimeout: 5 * time.Second,
-		TLSConfig:         configureTLS(),
-	}
-
-	// Initialize service monitor
-	server.monitor = &Monitor{
-		store:       serviceStore,
-		userStore:   userStore,
-		clients:     clients,
-		rateLimiter: rateLimiter,
-		config:      &config.Security,
-		monitor:     monitor,
-	}
-
-	// Initialize alert engine
-	server.alertEngine = NewAlertEngine(server.stores.Alert, server.stores.Service, server.stores.Notification, config.Alerts)
-
-	// Initialize demo data for testing
-	initializeDemoDataComplete(stores, db)
-
-	return server, nil
+	return &Config{
+		DBPath: dbPath,
+		Port:   port,
+		JWTKey: jwtKey,
+	}, nil
 }
 
-// loadConfig loads configuration from environment variables
-func loadConfig() *Config {
-	config := &Config{
-		Port:        getEnv("PORT", defaultPort),
-		DBPath:      getEnv("DB_PATH", defaultDBPath),
-		EnableHTTPS: getEnv("ENABLE_HTTPS", "false") == "true",
-		TLSCertFile: getEnv("TLS_CERT_FILE", ""),
-		TLSKeyFile:  getEnv("TLS_KEY_FILE", ""),
-		Security: SecurityConfig{
-			MaxRequestSize: maxRequestSize,
-			AllowedOrigins: strings.Split(getEnv("ALLOWED_ORIGINS", "http://localhost:3000"), ","),
-			RateLimit: RateLimitConfig{
-				RPM:                 60,
-				Burst:               10,
-				AuthRPM:             10,
-				AuthBurst:           3,
-				WSConnections:       5,
-				EnableLogging:       true,
-				SuspiciousThreshold: 5,
-			},
-			Auth: AuthConfig{
-				MaxLoginAttempts:   5,
-				LockoutDuration:    30 * time.Minute,
-				PasswordMinLength:  8,
-				RequireComplexity:  true,
-				TokenRotationHours: 1,
-			},
-			DatabaseEncryption: getEnv("ENABLE_DB_ENCRYPTION", "false") == "true",
-		},
-		Alerts: AlertConfig{
-			EvaluationInterval:         alertEvaluationInterval,
-			MaxNotificationsPerHour:    10,
-			EnableEmailNotifications:   getEnv("ENABLE_EMAIL_ALERTS", "true") == "true",
-			EnableSMSNotifications:     getEnv("ENABLE_SMS_ALERTS", "false") == "true",
-			EnableSlackNotifications:   getEnv("ENABLE_SLACK_ALERTS", "true") == "true",
-			EnableWebhookNotifications: getEnv("ENABLE_WEBHOOK_ALERTS", "false") == "true",
-		},
-	}
-
-	// Load encryption key if needed
-	if config.Security.DatabaseEncryption {
-		encKey := getEnv("DB_ENCRYPTION_KEY", "")
-		if encKey == "" {
-			// Generate random key for demo - in production, this should be persistent
-			log.Println("🔑 Generated database encryption key (set DB_ENCRYPTION_KEY env var for production)")
-		} else {
-			// In production, decode the hex key from environment
-			log.Println("🔑 Using database encryption key from environment")
-		}
-	}
-
-	return config
-}
-
-// initializeDatabase creates all necessary database tables
-func initializeDatabase(db *sql.DB) error {
-	// Create original tables (now implemented in database_init.go)
-	if err := createOriginalTables(db); err != nil {
-		return fmt.Errorf("failed to create original tables: %w", err)
-	}
-
-	// Create alert system tables
-	if err := createAlertTables(db); err != nil {
-		return fmt.Errorf("failed to create alert tables: %w", err)
-	}
-
-	return nil
-}
-
-// createAlertTables creates alert-related database tables
-func createAlertTables(db *sql.DB) error {
-	schema := `
-	-- Alerts table
-	CREATE TABLE IF NOT EXISTS alerts (
-		id TEXT PRIMARY KEY,
-		user_id TEXT NOT NULL,
-		name TEXT NOT NULL,
-		description TEXT,
-		service_ids TEXT NOT NULL, -- JSON array of service IDs
-		condition TEXT NOT NULL,   -- status, latency, ping_latency, multiple_down
-		operator TEXT NOT NULL,    -- equals, not_equals, greater_than, less_than, etc.
-		value TEXT NOT NULL,       -- threshold value
-		enabled BOOLEAN DEFAULT 1,
-		notifications TEXT NOT NULL, -- JSON array of notification types
-		cooldown INTEGER DEFAULT 5, -- minutes
-		severity TEXT DEFAULT 'warning', -- info, warning, critical
-		created DATETIME DEFAULT CURRENT_TIMESTAMP,
-		last_triggered DATETIME,
-		trigger_count INTEGER DEFAULT 0,
-		FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-	);
-
-	-- Alert triggers table (for history/logging)
-	CREATE TABLE IF NOT EXISTS alert_triggers (
-		id TEXT PRIMARY KEY,
-		alert_id TEXT NOT NULL,
-		service_id TEXT,
-		message TEXT NOT NULL,
-		severity TEXT NOT NULL,
-		triggered DATETIME DEFAULT CURRENT_TIMESTAMP,
-		resolved DATETIME,
-		FOREIGN KEY (alert_id) REFERENCES alerts (id) ON DELETE CASCADE,
-		FOREIGN KEY (service_id) REFERENCES services (id) ON DELETE SET NULL
-	);
-
-	-- Notification settings table
-	CREATE TABLE IF NOT EXISTS notification_settings (
-		id TEXT PRIMARY KEY,
-		user_id TEXT UNIQUE NOT NULL,
-		email_enabled BOOLEAN DEFAULT 1,
-		email_address TEXT,
-		email_verified BOOLEAN DEFAULT 0,
-		sms_enabled BOOLEAN DEFAULT 0,
-		sms_number TEXT,
-		sms_verified BOOLEAN DEFAULT 0,
-		slack_enabled BOOLEAN DEFAULT 0,
-		slack_webhook TEXT,
-		slack_channel TEXT,
-		webhook_enabled BOOLEAN DEFAULT 0,
-		webhook_url TEXT,
-		webhook_method TEXT DEFAULT 'POST',
-		updated DATETIME DEFAULT CURRENT_TIMESTAMP,
-		FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-	);
-
-	-- Indexes for better performance
-	CREATE INDEX IF NOT EXISTS idx_alerts_user_id ON alerts (user_id);
-	CREATE INDEX IF NOT EXISTS idx_alerts_enabled ON alerts (enabled);
-	CREATE INDEX IF NOT EXISTS idx_alert_triggers_alert_id ON alert_triggers (alert_id);
-	CREATE INDEX IF NOT EXISTS idx_alert_triggers_triggered ON alert_triggers (triggered);
-	CREATE INDEX IF NOT EXISTS idx_notification_settings_user_id ON notification_settings (user_id);
-	`
-
-	_, err := db.Exec(schema)
-	return err
-}
-
-// Run starts the server
-func (s *Server) Run(ctx context.Context) error {
-	// Start background services
-	go s.services.RateLimiter.StartCleanup(ctx)
-	go s.monitor.startMonitoring(ctx)
-
-	// Start alert engine
-	go s.alertEngine.Start(ctx)
-
-	// Log security status
-	s.logSecurityStatus()
-
-	// Start server
-	errChan := make(chan error, 1)
-	go func() {
-		if s.config.EnableHTTPS {
-			log.Printf("🔒 Secure HTTPS server running on https://localhost:%s", s.config.Port)
-			errChan <- s.httpServer.ListenAndServeTLS(s.config.TLSCertFile, s.config.TLSKeyFile)
-		} else {
-			if getEnv("ENV", "") == "production" {
-				log.Println("⚠️ WARNING: Running HTTP in production is not recommended")
-			}
-			log.Printf("🚀 HTTP server running on http://localhost:%s", s.config.Port)
-			errChan <- s.httpServer.ListenAndServe()
-		}
-	}()
-
-	// Wait for shutdown signal or error
-	select {
-	case <-ctx.Done():
-		return s.Shutdown()
-	case err := <-errChan:
-		if err != http.ErrServerClosed {
-			return fmt.Errorf("server error: %w", err)
-		}
-		return nil
-	}
-}
-
-// Shutdown gracefully shuts down the server
-func (s *Server) Shutdown() error {
-	log.Println("🛑 Shutting down server...")
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// Stop alert engine
-	if s.alertEngine != nil {
-		s.alertEngine.Stop()
-	}
-
-	if err := s.httpServer.Shutdown(shutdownCtx); err != nil {
-		log.Printf("⚠️ Server shutdown error: %v", err)
-	}
-
-	if err := s.db.Close(); err != nil {
-		log.Printf("⚠️ Database close error: %v", err)
-	}
-
-	log.Println("🔒 VrexisInsights Backend stopped securely")
-	return nil
-}
-
-// setupRoutes configures all application routes
-func (s *Server) setupRoutes() {
-	s.router = mux.NewRouter()
-
-	// Public endpoints
-	s.router.HandleFunc("/health", s.handleHealth).Methods("GET")
-
-	// Authentication routes
-	auth := s.router.PathPrefix("/auth").Subrouter()
-	auth.HandleFunc("/register", s.handleRegister).Methods("POST")
-	auth.HandleFunc("/login", s.handleLogin).Methods("POST")
-	auth.HandleFunc("/refresh", s.handleRefresh).Methods("POST")
-	auth.HandleFunc("/logout", s.handleLogout).Methods("POST")
-
-	// WebSocket endpoint
-	s.router.HandleFunc("/ws", s.handleWebSocket)
-
-	// API routes (protected)
-	api := s.router.PathPrefix("/api/v1").Subrouter()
-	api.Use(s.authMiddleware)
-
-	// Service routes
-	api.HandleFunc("/services", s.handleGetServices).Methods("GET")
-	api.HandleFunc("/services", s.handleCreateService).Methods("POST")
-	api.HandleFunc("/services/{id}", s.handleUpdateService).Methods("PUT")
-	api.HandleFunc("/services/{id}", s.handleDeleteService).Methods("DELETE")
-	api.HandleFunc("/profile", s.handleGetProfile).Methods("GET")
-	api.HandleFunc("/security/status", s.handleSecurityStatus).Methods("GET")
-
-	// Alert management routes
-	s.setupAlertRoutes(api)
-}
-
-// setupAlertRoutes configures alert-related routes
-func (s *Server) setupAlertRoutes(api *mux.Router) {
-	// Alert management routes
-	alerts := api.PathPrefix("/alerts").Subrouter()
-	alerts.HandleFunc("", s.handleGetAlerts).Methods("GET")
-	alerts.HandleFunc("", s.handleCreateAlert).Methods("POST")
-	alerts.HandleFunc("/{id}", s.handleGetAlert).Methods("GET")
-	alerts.HandleFunc("/{id}", s.handleUpdateAlert).Methods("PUT")
-	alerts.HandleFunc("/{id}", s.handleDeleteAlert).Methods("DELETE")
-	alerts.HandleFunc("/{id}/triggers", s.handleGetAlertTriggerHistory).Methods("GET")
-	alerts.HandleFunc("/{id}/test", s.handleTestAlertTrigger).Methods("POST")
-
-	// Notification settings routes
-	notifications := api.PathPrefix("/notifications").Subrouter()
-	notifications.HandleFunc("/settings", s.handleGetNotificationSettings).Methods("GET")
-	notifications.HandleFunc("/settings", s.handleUpdateNotificationSettings).Methods("PUT")
-}
-
-// buildMiddlewareStack creates the middleware chain
-func (s *Server) buildMiddlewareStack() http.Handler {
-	return s.securityMiddleware(
-		s.rateLimitMiddleware(
-			s.router))
-}
-
-// logSecurityStatus logs the current security configuration
-func (s *Server) logSecurityStatus() {
-	log.Printf("🛡️ Security Features Active:")
-	log.Printf("   - Rate Limiting: %d req/min general, %d req/min auth",
-		s.config.Security.RateLimit.RPM, s.config.Security.RateLimit.AuthRPM)
-	log.Printf("   - JWT Authentication with %d hour expiration", jwtExpirationHours)
-	log.Printf("   - Enhanced Security Headers")
-	log.Printf("   - Input Validation & Sanitization")
-	log.Printf("   - Database Encryption: %v", s.config.Security.DatabaseEncryption)
-	log.Printf("   - Security Monitoring: Active")
-	log.Printf("   - TLS Configuration: %v", s.config.EnableHTTPS)
-
-	// Alert system status
-	log.Printf("🚨 Alert System Features:")
-	log.Printf("   - Alert Evaluation Interval: %v", s.config.Alerts.EvaluationInterval)
-	log.Printf("   - Email Notifications: %v", s.config.Alerts.EnableEmailNotifications)
-	log.Printf("   - Slack Notifications: %v", s.config.Alerts.EnableSlackNotifications)
-	log.Printf("   - SMS Notifications: %v", s.config.Alerts.EnableSMSNotifications)
-	log.Printf("   - Webhook Notifications: %v", s.config.Alerts.EnableWebhookNotifications)
-	log.Printf("   - Max Notifications/Hour: %d", s.config.Alerts.MaxNotificationsPerHour)
-}
-
-// Utility functions
-
+// Get environment variable with fallback to default value
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
@@ -504,70 +97,391 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
-func configureTLS() *tls.Config {
-	return &tls.Config{
-		MinVersion: tls.VersionTLS12,
-		MaxVersion: tls.VersionTLS13,
-		CurvePreferences: []tls.CurveID{
-			tls.X25519,
-			tls.CurveP256,
-		},
-		CipherSuites: []uint16{
-			tls.TLS_AES_256_GCM_SHA384,
-			tls.TLS_AES_128_GCM_SHA256,
-			tls.TLS_CHACHA20_POLY1305_SHA256,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-		},
-		PreferServerCipherSuites: true,
-		SessionTicketsDisabled:   false,
-		Renegotiation:            tls.RenegotiateNever,
-	}
-}
-
-func openDatabase(dbPath string) (*sql.DB, error) {
+// Initialize database and create tables
+func initDatabase(dbPath string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	// Configure connection pool
-	db.SetMaxOpenConns(25)
+	// Set connection parameters
+	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(5 * time.Minute)
-	db.SetConnMaxIdleTime(1 * time.Minute)
+	db.SetConnMaxLifetime(30 * time.Minute)
 
-	// Enable WAL mode for better concurrency
-	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		log.Printf("⚠️ Failed to enable WAL mode: %v", err)
-	}
-
-	// Enable foreign keys
-	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
-		log.Printf("⚠️ Failed to enable foreign keys: %v", err)
+	// Create tables if they don't exist
+	err = createTables(db)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create tables: %w", err)
 	}
 
 	return db, nil
 }
 
-// Main function
-func main() {
-	log.Println("🚀 Starting VrexisInsights Backend v2.1 with Enhanced Security & Alert Management")
+// Create database tables
+func createTables(db *sql.DB) error {
+	userTable := `
+	CREATE TABLE IF NOT EXISTS users (
+		id TEXT PRIMARY KEY,
+		email TEXT UNIQUE NOT NULL,
+		password TEXT NOT NULL,
+		first_name TEXT NOT NULL,
+		last_name TEXT NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);`
 
-	// Create context for graceful shutdown
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+	serviceTable := `
+	CREATE TABLE IF NOT EXISTS services (
+		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL,
+		name TEXT NOT NULL,
+		url TEXT NOT NULL,
+		type TEXT NOT NULL,
+		status TEXT DEFAULT 'unknown',
+		latency INTEGER DEFAULT 0,
+		ping_latency INTEGER DEFAULT 0,
+		last_checked DATETIME,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users (id)
+	);`
 
-	// Initialize server
-	server, err := Initialize()
-	if err != nil {
-		log.Fatalf("❌ Failed to initialize server: %v", err)
+	if _, err := db.Exec(userTable); err != nil {
+		return err
 	}
 
-	// Run server
-	if err := server.Run(ctx); err != nil {
-		log.Fatalf("❌ Server error: %v", err)
+	if _, err := db.Exec(serviceTable); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// JWT Middleware for authentication
+func jwtMiddleware(next http.Handler, jwtKey string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokenString := r.Header.Get("Authorization")
+		tokenString = strings.TrimPrefix(tokenString, "Bearer ")
+
+		if tokenString == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(ErrorResponse{Error: "Missing token"})
+			return
+		}
+
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			return []byte(jwtKey), nil
+		})
+
+		if err != nil || !token.Valid {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(ErrorResponse{Error: "Invalid token"})
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// Health Check handler
+func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "Server is running"})
+}
+
+// Login Handler - FIXED
+func loginHandler(w http.ResponseWriter, r *http.Request) {
+	var creds Credentials
+	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Invalid request"})
+		return
+	}
+
+	// Validate user credentials
+	user, err := getUserByEmail(r.Context(), creds.Email)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Invalid credentials"})
+		return
+	}
+
+	if bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(creds.Password)) != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Invalid credentials"})
+		return
+	}
+
+	// Create JWT token
+	token, err := generateJWT(user)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Failed to generate token"})
+		return
+	}
+
+	// Remove password from user object before sending
+	user.Password = ""
+
+	// Send token and user in response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(AuthResponse{
+		Token: token,
+		User:  *user,
+	})
+}
+
+// Registration Handler - NEW
+func registerHandler(w http.ResponseWriter, r *http.Request) {
+	var reg Registration
+	if err := json.NewDecoder(r.Body).Decode(&reg); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Invalid request"})
+		return
+	}
+
+	// Validate input
+	if reg.Email == "" || reg.Password == "" || reg.FirstName == "" || reg.LastName == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "All fields are required"})
+		return
+	}
+
+	if len(reg.Password) < 6 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Password must be at least 6 characters"})
+		return
+	}
+
+	// Check if user already exists
+	_, err := getUserByEmail(r.Context(), reg.Email)
+	if err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "User already exists"})
+		return
+	}
+
+	// Hash password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(reg.Password), bcrypt.DefaultCost)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Failed to hash password"})
+		return
+	}
+
+	// Create user
+	user := &User{
+		ID:        uuid.New().String(),
+		Email:     reg.Email,
+		Password:  string(hashedPassword),
+		FirstName: reg.FirstName,
+		LastName:  reg.LastName,
+	}
+
+	err = createUser(r.Context(), user)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Failed to create user"})
+		return
+	}
+
+	// Generate token
+	token, err := generateJWT(user)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Failed to generate token"})
+		return
+	}
+
+	// Remove password from response
+	user.Password = ""
+
+	// Send response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(AuthResponse{
+		Token: token,
+		User:  *user,
+	})
+}
+
+// Get user by email from database
+func getUserByEmail(ctx context.Context, email string) (*User, error) {
+	query := `SELECT id, email, password, first_name, last_name FROM users WHERE email = ?`
+	var user User
+	err := globalDB.QueryRowContext(ctx, query, email).Scan(
+		&user.ID, &user.Email, &user.Password, &user.FirstName, &user.LastName)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, fmt.Errorf("failed to query user: %w", err)
+	}
+	return &user, nil
+}
+
+// Create user in database
+func createUser(ctx context.Context, user *User) error {
+	query := `INSERT INTO users (id, email, password, first_name, last_name) VALUES (?, ?, ?, ?, ?)`
+	_, err := globalDB.ExecContext(ctx, query, user.ID, user.Email, user.Password, user.FirstName, user.LastName)
+	return err
+}
+
+// Generate JWT token - FIXED
+func generateJWT(user *User) (string, error) {
+	claims := &jwt.RegisteredClaims{
+		Subject:   user.ID,
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)), // 24 hours
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte("your-secret-key-change-this"))
+	if err != nil {
+		return "", fmt.Errorf("error generating JWT: %w", err)
+	}
+
+	return tokenString, nil
+}
+
+// Protected handler (example)
+func protectedHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "You have access to this protected route"})
+}
+
+// Setup routes with CORS handling - FIXED
+func setupRoutes(db *sql.DB, jwtKey string) http.Handler {
+	r := mux.NewRouter()
+
+	// API v1 routes
+	api := r.PathPrefix("/auth").Subrouter()
+
+	// Public auth routes
+	api.HandleFunc("/login", loginHandler).Methods("POST")
+	api.HandleFunc("/register", registerHandler).Methods("POST")
+
+	// Public routes
+	r.HandleFunc("/health", healthCheckHandler).Methods("GET")
+
+	// Protected routes with JWT middleware
+	protected := r.PathPrefix("/api/v1").Subrouter()
+	protected.Use(func(next http.Handler) http.Handler {
+		return jwtMiddleware(next, jwtKey)
+	})
+	protected.HandleFunc("/protected", protectedHandler).Methods("GET")
+
+	// Apply CORS middleware
+	corsHandler := cors.New(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:3000", "http://127.0.0.1:3000"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization"},
+		AllowCredentials: true,
+	}).Handler(r)
+
+	return corsHandler
+}
+
+func main() {
+	// Load configuration
+	config, err := loadConfig()
+	if err != nil {
+		log.Fatalf("Error loading config: %v", err)
+	}
+
+	// Initialize the database connection
+	db, err := initDatabase(config.DBPath)
+	if err != nil {
+		log.Fatalf("Error opening database: %v", err)
+	}
+	globalDB = db // Set global DB reference
+
+	// Create a demo user for testing
+	createDemoUser()
+
+	// Initialize routes
+	routes := setupRoutes(db, config.JWTKey)
+
+	// Graceful shutdown setup
+	srv := &http.Server{
+		Addr:         ":" + config.Port,
+		Handler:      routes,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+
+	// Run the server in a goroutine
+	go func() {
+		log.Printf("Server started on port %s", config.Port)
+		log.Printf("Demo login: admin@vrexisinsights.com / admin123")
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server error: %v", err)
+		}
+	}()
+
+	// Wait for an interrupt signal to gracefully shut down
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt)
+	<-stop
+
+	// Graceful shutdown
+	log.Println("Shutting down server...")
+
+	// Create a context with a timeout for graceful shutdown
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Error shutting down server: %v", err)
+	}
+
+	// Close the database connection
+	if err := db.Close(); err != nil {
+		log.Printf("Error closing database: %v", err)
+	}
+
+	log.Println("Server gracefully stopped")
+}
+
+// Create demo user for testing
+func createDemoUser() {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
+	if err != nil {
+		log.Printf("Error creating demo user: %v", err)
+		return
+	}
+
+	user := &User{
+		ID:        uuid.New().String(),
+		Email:     "admin@vrexisinsights.com",
+		Password:  string(hashedPassword),
+		FirstName: "Admin",
+		LastName:  "User",
+	}
+
+	// Check if user already exists
+	_, err = getUserByEmail(context.Background(), user.Email)
+	if err == nil {
+		// User already exists
+		return
+	}
+
+	err = createUser(context.Background(), user)
+	if err != nil {
+		log.Printf("Error creating demo user: %v", err)
+	} else {
+		log.Printf("Demo user created: %s", user.Email)
 	}
 }
