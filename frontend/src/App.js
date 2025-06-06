@@ -99,7 +99,7 @@ const AuthProvider = ({ children }) => {
         // Handle rate limiting specifically
         if (response.status === 429) {
           const retryAfter = response.headers.get('Retry-After') || '60';
-          throw new Error(Rate limit exceeded. Please wait ${retryAfter} seconds before trying again.);
+          throw new Error(`Rate limit exceeded. Please wait ${retryAfter} seconds before trying again.`);
         }
         
         throw new Error(error.error || 'Registration failed');
@@ -243,7 +243,7 @@ const LoginForm = ({ onToggleMode }) => {
                       Signing in...
                     </>
                   ) : retryAfter > 0 ? (
-                    ⏳ Wait ${retryAfter}s
+                    {`⏳ Wait ${retryAfter}s`}
                   ) : (
                     'Sign In'
                   )}
@@ -447,7 +447,7 @@ const RegisterForm = ({ onToggleMode }) => {
                       Creating account...
                     </>
                   ) : retryAfter > 0 ? (
-                    ⏳ Wait ${retryAfter}s
+                    {`⏳ Wait ${retryAfter}s`}
                   ) : (
                     'Create Account'
                   )}
@@ -504,7 +504,7 @@ const ServiceMonitorDashboard = () => {
   const apiCall = useCallback(async (url, options = {}) => {
     const headers = {
       'Content-Type': 'application/json',
-      'Authorization': Bearer ${token},
+      'Authorization': `Bearer ${token}`,
       ...options.headers,
     };
 
@@ -550,7 +550,7 @@ const ServiceMonitorDashboard = () => {
       if (error.message.includes('Rate limit')) {
         throw error;
       }
-      throw new Error(Network error: ${error.message});
+      throw new Error(`Network error: ${error.message}`);
     }
   }, [token]);
 
@@ -606,7 +606,7 @@ const ServiceMonitorDashboard = () => {
     const connectWebSocket = () => {
       try {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = ${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)};
+        const wsUrl = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`;
         const websocket = new WebSocket(wsUrl);
         
         websocket.onopen = () => {
@@ -740,14 +740,14 @@ const ServiceMonitorDashboard = () => {
         console.log('🔒 Service added securely');
       } else {
         const errorData = await response.json();
-        setUrlError(Failed to add service: ${errorData.error});
+        setUrlError(`Failed to add service: ${errorData.error}`);
       }
     } catch (error) {
       console.error('Error adding service:', error);
       if (error.message.includes('Rate limit')) {
-        setUrlError(${error.message} Please wait ${retryAfter} seconds.);
+        setUrlError(`${error.message} Please wait ${retryAfter} seconds.`);
       } else {
-        setUrlError(Connection error: ${error.message});
+        setUrlError(`Connection error: ${error.message}`);
       }
     } finally {
       setIsSubmitting(false);
@@ -756,12 +756,12 @@ const ServiceMonitorDashboard = () => {
 
   // Enhanced secure delete with rate limit handling
   const handleDelete = async (id, name) => {
-    if (!window.confirm(Are you sure you want to delete "${name}"?)) {
+    if (!window.confirm(`Are you sure you want to delete "${name}"?`)) {
       return;
     }
 
     try {
-      const response = await apiCall(/api/v1/services/${encodeURIComponent(id)}, {
+      const response = await apiCall(`/api/v1/services/${encodeURIComponent(id)}`, {
         method: 'DELETE'
       });
       
@@ -770,12 +770,12 @@ const ServiceMonitorDashboard = () => {
         console.log('🔒 Service deleted securely');
       } else {
         const errorData = await response.json();
-        alert(Failed to delete service: ${errorData.error});
+        alert(`Failed to delete service: ${errorData.error}`);
       }
     } catch (error) {
       console.error('Error deleting service:', error);
       if (error.message.includes('Rate limit')) {
-        alert(${error.message} Please wait ${retryAfter} seconds before trying again.);
+        alert(`${error.message} Please wait ${retryAfter} seconds before trying again.`);
       } else {
         alert('Error deleting service. Please check your connection.');
       }
@@ -796,7 +796,7 @@ const ServiceMonitorDashboard = () => {
       console.error('Error refreshing services:', error);
       if (error.message.includes('Rate limit')) {
         // Show a toast or banner instead of console error
-        console.warn(Rate limited: ${error.message});
+        console.warn(`Rate limited: ${error.message}`);
       }
     }
   };
@@ -909,11 +909,11 @@ const ServiceMonitorDashboard = () => {
     const minutes = Math.floor(diff / 60000);
     
     if (minutes < 1) return 'Just now';
-    if (minutes < 60) return ${minutes}m ago;
+    if (minutes < 60) return `${minutes}m ago`;
     const hours = Math.floor(minutes / 60);
-    if (hours < 24) return ${hours}h ago;
+    if (hours < 24) return `${hours}h ago`;
     const days = Math.floor(hours / 24);
-    return ${days}d ago;
+    return `${days}d ago`;
   };
 
   const themeClass = darkMode ? 'bg-dark text-light' : 'bg-light text-dark';
@@ -963,7 +963,7 @@ const ServiceMonitorDashboard = () => {
         }
       }</style>
       
-      <div className={${themeClass} min-vh-100}>
+      <div className={`${themeClass} min-vh-100`}>
         <div className="status-indicator">
           {getStatusIndicator()}
         </div>
@@ -984,7 +984,7 @@ const ServiceMonitorDashboard = () => {
             <div className="d-flex gap-2">
               <button
                 onClick={() => setDarkMode(!darkMode)}
-                className={btn btn-${darkMode ? 'light' : 'dark'}}
+                className={`btn btn-${darkMode ? 'light' : 'dark'}`}
                 aria-label="Toggle Dark Mode"
               >
                 {darkMode ? '☀️' : '🌙'}
@@ -1034,7 +1034,7 @@ const ServiceMonitorDashboard = () => {
           {/* Enhanced Stats Cards */}
           <div className="row mb-4">
             <div className="col-xl-2 col-md-4 mb-3">
-              <div className={card ${cardClass} stats-card success}>
+              <div className={`card ${cardClass} stats-card success`}>
                 <div className="card-body">
                   <div className="d-flex align-items-center">
                     <div className="me-3">
@@ -1050,7 +1050,7 @@ const ServiceMonitorDashboard = () => {
             </div>
 
             <div className="col-xl-2 col-md-4 mb-3">
-              <div className={card ${cardClass} stats-card danger}>
+              <div className={`card ${cardClass} stats-card danger`}>
                 <div className="card-body">
                   <div className="d-flex align-items-center">
                     <div className="me-3">
@@ -1066,7 +1066,7 @@ const ServiceMonitorDashboard = () => {
             </div>
 
             <div className="col-xl-2 col-md-4 mb-3">
-              <div className={card ${cardClass} stats-card security}>
+              <div className={`card ${cardClass} stats-card security`}>
                 <div className="card-body">
                   <div className="d-flex align-items-center">
                     <div className="me-3">
@@ -1082,7 +1082,7 @@ const ServiceMonitorDashboard = () => {
             </div>
 
             <div className="col-xl-2 col-md-4 mb-3">
-              <div className={card ${cardClass} stats-card}>
+              <div className={`card ${cardClass} stats-card`}>
                 <div className="card-body">
                   <div className="d-flex align-items-center">
                     <div className="me-3">
@@ -1098,7 +1098,7 @@ const ServiceMonitorDashboard = () => {
             </div>
 
             <div className="col-xl-2 col-md-4 mb-3">
-              <div className={card ${cardClass} stats-card info}>
+              <div className={`card ${cardClass} stats-card info`}>
                 <div className="card-body">
                   <div className="d-flex align-items-center">
                     <div className="me-3">
@@ -1114,7 +1114,7 @@ const ServiceMonitorDashboard = () => {
             </div>
 
             <div className="col-xl-2 col-md-4 mb-3">
-              <div className={card ${cardClass} stats-card}>
+              <div className={`card ${cardClass} stats-card`}>
                 <div className="card-body">
                   <div className="d-flex align-items-center">
                     <div className="me-3">
@@ -1131,7 +1131,7 @@ const ServiceMonitorDashboard = () => {
           </div>
 
           {/* Services Section */}
-          <div className={card ${cardClass}}>
+          <div className={`card ${cardClass}`}>
             <div className="card-header">
               <div className="d-flex justify-content-between align-items-center">
                 <h3 className="mb-0">
@@ -1184,7 +1184,7 @@ const ServiceMonitorDashboard = () => {
                       <label className="form-label">Service Name</label>
                       <input
                         type="text"
-                        className={form-control ${inputClass}}
+                        className={`form-control ${inputClass}`}
                         placeholder="My API Service"
                         value={newService.name}
                         onChange={(e) => setNewService({ ...newService, name: e.target.value })}
@@ -1195,7 +1195,7 @@ const ServiceMonitorDashboard = () => {
                       <label className="form-label">Service URL/IP Address</label>
                       <input
                         type="text"
-                        className={form-control ${inputClass} ${urlError ? 'is-invalid' : ''}}
+                        className={`form-control ${inputClass} ${urlError ? 'is-invalid' : ''}`}
                         placeholder="https://api.example.com, 192.168.1.1, or router.local"
                         value={newService.url}
                         onChange={(e) => setNewService({ ...newService, url: e.target.value })}
@@ -1206,7 +1206,7 @@ const ServiceMonitorDashboard = () => {
                     <div className="col-md-3 mb-3">
                       <label className="form-label">Service Type</label>
                       <select
-                        className={form-select ${inputClass}}
+                        className={`form-select ${inputClass}`}
                         value={newService.type}
                         onChange={(e) => setNewService({ ...newService, type: e.target.value })}
                       >
@@ -1240,7 +1240,7 @@ const ServiceMonitorDashboard = () => {
                           Adding...
                         </>
                       ) : isRateLimited ? (
-                        ⏳ Wait ${retryAfter}s
+                        {`⏳ Wait ${retryAfter}s`}
                       ) : (
                         '🔒 Add Service'
                       )}
@@ -1255,20 +1255,20 @@ const ServiceMonitorDashboard = () => {
                     const isSecure = service.url && service.url.startsWith('https://');
                     return (
                     <div key={service.id} className="col-lg-6 mb-3">
-                      <div className={card service-card h-100 ${darkMode ? 'bg-dark border-secondary' : ''} ${isSecure ? 'secure-service' : 'insecure-service'}}>
+                      <div className={`card service-card h-100 ${darkMode ? 'bg-dark border-secondary' : ''} ${isSecure ? 'secure-service' : 'insecure-service'}`}>
                         <div className="card-body">
                           <div className="d-flex justify-content-between align-items-start mb-3">
                             <div className="d-flex align-items-start">
                               <span className="fs-2 me-3">{getTypeIcon(service.type || 'website')}</span>
                               <div>
-                                <h6 className={card-title mb-1 ${darkMode ? 'text-white' : 'text-dark'}}>
+                                <h6 className={`card-title mb-1 ${darkMode ? 'text-white' : 'text-dark'}`}>
                                   {service.name || 'Unknown Service'}
                                   {isSecure && <span className="ms-2 text-success" title="Secure HTTPS connection">🔒</span>}
                                   {!isSecure && service.url && service.url.startsWith('http://') && 
                                     <span className="ms-2 text-warning" title="Insecure HTTP connection">⚠️</span>
                                   }
                                 </h6>
-                                <small className={d-block ${darkMode ? 'text-light' : 'text-muted'}}>{service.url || 'No URL'}</small>
+                                <small className={`d-block ${darkMode ? 'text-light' : 'text-muted'}`}>{service.url || 'No URL'}</small>
                                 <div className="d-flex gap-1 mt-1">
                                   <small className="badge bg-secondary">{getTypeLabel(service.type || 'website')}</small>
                                   {isSecure && <small className="badge bg-success">🔒 Secure</small>}
@@ -1294,7 +1294,7 @@ const ServiceMonitorDashboard = () => {
                           <div className="row text-center">
                             <div className="col-4">
                               <div className="border-end">
-                                <div className={fw-bold ${darkMode ? 'text-white' : 'text-dark'}}>
+                                <div className={`fw-bold ${darkMode ? 'text-white' : 'text-dark'}`}>
                                   {service.url && !service.url.includes('://') ? 'N/A' : (service.latency || 0) + 'ms'}
                                 </div>
                                 <small className={darkMode ? 'text-light' : 'text-muted'}>
@@ -1304,12 +1304,12 @@ const ServiceMonitorDashboard = () => {
                             </div>
                             <div className="col-4">
                               <div className="border-end">
-                                <div className={fw-bold ${darkMode ? 'text-white' : 'text-dark'}}>{service.ping_latency || 0}ms</div>
+                                <div className={`fw-bold ${darkMode ? 'text-white' : 'text-dark'}`}>{service.ping_latency || 0}ms</div>
                                 <small className={darkMode ? 'text-light' : 'text-muted'}>Ping</small>
                               </div>
                             </div>
                             <div className="col-4">
-                              <div className={fw-bold ${darkMode ? 'text-white' : 'text-dark'}}>{formatLastChecked(service.last_checked)}</div>
+                              <div className={`fw-bold ${darkMode ? 'text-white' : 'text-dark'}`}>{formatLastChecked(service.last_checked)}</div>
                               <small className={darkMode ? 'text-light' : 'text-muted'}>Last Check</small>
                             </div>
                           </div>
@@ -1338,7 +1338,7 @@ const ServiceMonitorDashboard = () => {
 
           {/* Latency Chart */}
           {services.length > 0 && (
-            <div className={card shadow border-0 mt-4 ${cardClass}}>
+            <div className={`card shadow border-0 mt-4 ${cardClass}`}>
               <div className="card-body">
                 <h5 className="mb-3">📈 HTTP & Ping Latency Chart</h5>
                 <ResponsiveContainer width="100%" height={300}>
@@ -1417,4 +1417,4 @@ const AuthenticatedApp = () => {
   return isAuthenticated() ? <ServiceMonitorDashboard /> : <AuthScreen />;
 };
 
-export default Dashboard;
+export default App;
