@@ -227,7 +227,10 @@ class ApiService {
 
   // WebSocket connection using your backend's /ws endpoint
   connectWebSocket(onMessage, onError) {
-    const wsURL = this.baseURL.replace('http://localhost:8080', 'ws://localhost:8080') + '/ws';
+    // Support any baseURL by converting the protocol to WS/WSS
+    const urlObj = new URL(this.baseURL);
+    const wsProtocol = urlObj.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsURL = `${wsProtocol}//${urlObj.host}/ws`;
     console.log('Connecting to WebSocket:', wsURL);
     
     const ws = new WebSocket(wsURL);
