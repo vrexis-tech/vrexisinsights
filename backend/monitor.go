@@ -302,7 +302,7 @@ func (m *Monitor) checkPing(url string) (status string, pingLatency *int) {
 	return "up", &duration
 }
 
-// services.go - Complete rate limiting and client management
+// Rate limiting and client management
 
 // RateLimiter handles rate limiting for API requests
 type RateLimiter struct {
