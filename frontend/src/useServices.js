@@ -11,11 +11,12 @@ export const useServices = (token) => {
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const pollCleanupRef = useRef(null);
 
-  // Initialize API service with token
+  // Store token for future authenticated calls if needed
   useEffect(() => {
     if (token) {
-      console.log('Setting API token');
-      apiService.setTokens(token);
+      localStorage.setItem('token', token);
+    } else {
+      localStorage.removeItem('token');
     }
   }, [token]);
 

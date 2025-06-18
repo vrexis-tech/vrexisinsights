@@ -1,6 +1,5 @@
-// desktopApiService.js - Fixed API service that works for both web and desktop modes
-
-class DesktopApiService {
+// apiService.js - Unified API service that works for both web and desktop modes
+class ApiService {
   constructor() {
     this.isDesktop = window.go !== undefined;
     // FIXED: Ensure baseURL is never null
@@ -286,5 +285,5 @@ class DesktopApiService {
 }
 
 // Create singleton instance
-const desktopApiService = new DesktopApiService();
-export default desktopApiService;
+const apiService = new ApiService();
+export default apiService;
