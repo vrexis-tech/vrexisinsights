@@ -10,7 +10,6 @@ export const useServices = (token) => {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const pollCleanupRef = useRef(null);
-  const wsRef = useRef(null);
 
   // Initialize API service with token
   useEffect(() => {
@@ -203,53 +202,6 @@ export const useServices = (token) => {
     return pollCleanupRef.current;
   }, [token]);
 
-  // Setup WebSocket connection (if backend supports it)
-  const startWebSocket = useCallback(() => {
-    if (!token || wsRef.current) return;
-
-    try {
-      console.log('Starting WebSocket connection...');
-      wsRef.current = apiService.connectWebSocket(
-        // onMessage
-        (data) => {
-          console.log('WebSocket data received:', data);
-          
-          switch (data.type) {
-            case 'services_update':
-              setServices(data.services || []);
-              setLastUpdated(new Date());
-              break;
-            case 'service_status_change':
-              setServices(prev => prev.map(service => 
-                service.id === data.service_id 
-                  ? { ...service, ...data.updates }
-                  : service
-              ));
-              setLastUpdated(new Date());
-              break;
-            case 'connection_status':
-              setConnectionStatus(data.status);
-              break;
-            default:
-              console.log('Unknown WebSocket message type:', data.type);
-          }
-        },
-        // onError
-        (error) => {
-          console.error('WebSocket error, falling back to polling:', error);
-          setConnectionStatus('disconnected');
-          // Fallback to polling if WebSocket fails
-          startPolling();
-        }
-      );
-      
-      setConnectionStatus('connected');
-    } catch (err) {
-      console.error('WebSocket connection failed, using polling:', err);
-      // Fallback to polling
-      startPolling();
-    }
-  }, [token, startPolling]);
 
   // Initialize data fetching and real-time updates
   useEffect(() => {
@@ -266,19 +218,10 @@ export const useServices = (token) => {
     // Initial fetch
     fetchServices();
 
-    // Try WebSocket first, fallback to polling
-    const wsSupported = 'WebSocket' in window;
-    if (wsSupported) {
-      // Give initial fetch a moment, then start WebSocket
-      setTimeout(() => {
-        startWebSocket();
-      }, 1000);
-    } else {
-      console.log('WebSocket not supported, using polling');
-      setTimeout(() => {
-        startPolling();
-      }, 1000);
-    }
+    // Start polling for updates
+    setTimeout(() => {
+      startPolling();
+    }, 1000);
 
     // Cleanup function
     return () => {
@@ -286,12 +229,8 @@ export const useServices = (token) => {
       if (pollCleanupRef.current) {
         pollCleanupRef.current();
       }
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
     };
-  }, [token, fetchServices, startWebSocket, startPolling]);
+  }, [token, fetchServices, startPolling]);
 
   // Computed statistics
   const stats = useMemo(() => {
