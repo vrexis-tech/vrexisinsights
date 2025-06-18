@@ -24,6 +24,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
+	"github.com/wailsapp/wails/v2"
+	"github.com/wailsapp/wails/v2/pkg/options"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -1845,9 +1847,15 @@ func main() {
 		}
 	}()
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt)
-	<-stop
+	app := wails.CreateApp(&options.App{
+		Title:  "Vrexis Insights",
+		Width:  1024,
+		Height: 768,
+	})
+
+	if err := app.Run(); err != nil {
+		log.Fatalf("❌ Wails app error: %v", err)
+	}
 
 	log.Println("🛑 Shutting down server...")
 
