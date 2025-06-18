@@ -9,9 +9,9 @@ openssl rand -hex 32  # Use this for JWT_SECRET
 openssl rand -hex 32  # Use this for JWT_REFRESH_SECRET
 
 # 2. Create .env file in your backend directory
-cp .env.example .env
+cp backend/.env.example backend/.env
 
-# 3. Update .env with your values
+# 3. Update backend/.env with your values
 ```
 
 ### Step 2: Backend Deployment
@@ -462,8 +462,8 @@ git clone your-repo
 cd vrexis-insights
 
 # 2. Configure environment
-cp .env.example .env
-nano .env  # Edit with your values
+cp backend/.env.example backend/.env
+nano backend/.env  # Edit with your values
 
 # 3. Generate secrets
 openssl rand -hex 32  # Copy to JWT_SECRET
