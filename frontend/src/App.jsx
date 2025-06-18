@@ -1,5 +1,5 @@
 // frontend/src/App.jsx
-// Updated to use desktopApiService with proper fallback handling
+// Updated to use a unified apiService for web and desktop modes
 
 import React, { useState, useEffect } from 'react'
 import { 
@@ -16,10 +16,10 @@ import {
   Trash2
 } from 'lucide-react'
 
-// Import our desktop API service
-import desktopApiService from './services/desktopApiService'
+// Import the unified API service
+import apiService from './apiService'
 
-// Custom hook to use desktopApiService
+// Custom hook to use apiService
 function useServices() {
   const [services, setServices] = useState([])
   const [stats, setStats] = useState({
@@ -36,7 +36,7 @@ function useServices() {
   const fetchServices = async () => {
     try {
       setError(null)
-      const data = await desktopApiService.getServices()
+      const data = await apiService.getServices()
       setServices(Array.isArray(data) ? data : [])
     } catch (err) {
       console.error('Failed to fetch services:', err)
@@ -48,7 +48,7 @@ function useServices() {
   // Fetch stats
   const fetchStats = async () => {
     try {
-      const data = await desktopApiService.getServiceStats()
+      const data = await apiService.getServiceStats()
       setStats(data || {
         total_services: 0,
         services_up: 0,
@@ -64,7 +64,7 @@ function useServices() {
   // Add service
   const addService = async (serviceData) => {
     try {
-      await desktopApiService.addService(serviceData)
+      await apiService.addService(serviceData)
       await fetchServices()
       await fetchStats()
       return { success: true }
@@ -77,7 +77,7 @@ function useServices() {
   // Delete service
   const deleteService = async (serviceId) => {
     try {
-      await desktopApiService.deleteService(serviceId)
+      await apiService.deleteService(serviceId)
       await fetchServices()
       await fetchStats()
       return { success: true }
