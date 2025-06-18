@@ -1,0 +1,46 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "vrexisinsights",
+  "outputfilename": "vrexisinsights",
+  "frontend": {
+    "dir": "./frontend",
+    "install": "npm install",
+    "build": "npm run build",
+    "dev": "npm run dev",
+    "package": {
+      "distDir": "./dist",
+      "excludeFilter": "",
+      "compress": false
+    }
+  },
+  "backend": {
+    "dir": ".",
+    "go": {
+      "main": "./main.go",
+      "binary": "vrexisinsights",
+      "ldflags": "",
+      "tags": "",
+      "race": false
+    }
+  },
+  "author": {
+    "name": "Vrexis Tech",
+    "email": "contact@vrexis.tech"
+  },
+  "info": {
+    "productName": "Vrexis Insights",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright © 2024 Vrexis Tech",
+    "comments": "A modern service monitoring dashboard"
+  },
+  "nsis": {
+    "languages": ["English"],
+    "displayName": "Vrexis Insights",
+    "displayVersion": "1.0.0",
+    "publisher": "Vrexis Tech",
+    "homepage": "https://vrexis.tech",
+    "license": "LICENSE",
+    "info": "Service monitoring and alerting platform",
+    "guidUpgrade": "3C079365-9B97-4D5E-B67B-35F4D2C40FCA"
+  }
+}

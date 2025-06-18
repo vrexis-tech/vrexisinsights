@@ -1,0 +1,25 @@
+{
+  "scripts": {
+    "dev": "wails dev",
+    "build": "wails build",
+    "build:prod": "wails build -clean -trimpath -ldflags \"-s -w\"",
+    "build:windows": "wails build -platform windows/amd64",
+    "build:mac": "wails build -platform darwin/amd64",
+    "build:linux": "wails build -platform linux/amd64",
+    "build:all": "npm run build:windows && npm run build:mac && npm run build:linux",
+    "frontend:dev": "cd frontend && npm run dev",
+    "frontend:build": "cd frontend && npm run build",
+    "frontend:install": "cd frontend && npm install",
+    "backend:dev": "go run .",
+    "backend:build": "go build -o bin/vrexis-insights .",
+    "backend:test": "go test ./...",
+    "install": "npm run frontend:install && go mod tidy",
+    "clean": "rm -rf bin/ && rm -rf frontend/dist/ && rm -rf build/",
+    "wails:init": "wails init -n VrexisInsights -t vanilla",
+    "wails:doctor": "wails doctor",
+    "wails:update": "wails update"
+  },
+  "devDependencies": {
+    "@wailsapp/cli": "latest"
+  }
+}
