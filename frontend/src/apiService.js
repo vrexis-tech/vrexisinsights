@@ -1,214 +1,252 @@
-// apiService.js - Complete API integration for VREXIS Insights backend
+// desktopApiService.js - Fixed API service that works for both web and desktop modes
 
-class ApiService {
-  constructor(baseURL = 'http://localhost:8080') {
-    this.baseURL = baseURL;
-    this.accessToken = null;
-    this.refreshToken = null;
-    this.refreshPromise = null;
-  }
+class DesktopApiService {
+  constructor() {
+    this.isDesktop = window.go !== undefined;
+    // FIXED: Ensure baseURL is never null
+    this.baseURL = this.isDesktop
+      ? "http://127.0.0.1:8080"
+      : "http://127.0.0.1:8080";
 
-  setTokens(accessToken, refreshToken = null) {
-    this.accessToken = accessToken;
-    if (refreshToken) {
-      this.refreshToken = refreshToken;
+    if (this.isDesktop) {
+      console.log("🖥️  Running in desktop mode with Wails");
+    } else {
+      console.log("🌐 Running in web mode, baseURL:", this.baseURL);
     }
   }
 
-  getToken() {
-    return this.accessToken;
+  // Check if we're running in desktop mode
+  isDesktopMode() {
+    return this.isDesktop;
   }
 
-  async makeRequest(endpoint, options = {}) {
-    const url = `${this.baseURL}${endpoint}`;
+  // Get API endpoint (for web mode or debugging)
+  async getAPIEndpoint() {
+    if (this.isDesktop && window.go?.main?.App?.GetAPIEndpoint) {
+      try {
+        const endpoint = await window.go.main.App.GetAPIEndpoint();
+        console.log("📱 Got API endpoint from desktop:", endpoint);
+        return endpoint;
+      } catch (error) {
+        console.error("Failed to get API endpoint from desktop:", error);
+        return this.baseURL;
+      }
+    }
+    return this.baseURL;
+  }
+
+  // =============================================================================
+  // SERVICES API
+  // =============================================================================
+
+  async getServices() {
+    if (this.isDesktop && window.go?.main?.App?.GetServices) {
+      try {
+        console.log("📱 Fetching services via Wails...");
+        const services = await window.go.main.App.GetServices();
+        console.log("✅ Desktop API returned:", services);
+        return services || [];
+      } catch (error) {
+        console.error("Desktop API error:", error);
+        // Fallback to HTTP API
+        return this.makeHttpRequest("/api/v1/services");
+      }
+    }
+
+    // Web mode - use HTTP API
+    console.log("🌐 Fetching services via HTTP API...");
+    return this.makeHttpRequest("/api/v1/services");
+  }
+
+  async addService(serviceData) {
+    if (this.isDesktop && window.go?.main?.App?.AddService) {
+      try {
+        console.log("📱 Adding service via Wails:", serviceData);
+        const service = await window.go.main.App.AddService(
+          serviceData.name,
+          serviceData.url,
+          serviceData.type || "website"
+        );
+        console.log("✅ Service added via desktop API:", service);
+        return service;
+      } catch (error) {
+        console.error("Desktop API error:", error);
+        throw new Error(error.message || "Failed to add service");
+      }
+    }
+
+    // Web mode - use HTTP API
+    console.log("🌐 Adding service via HTTP API:", serviceData);
+    return this.makeHttpRequest("/api/v1/services", {
+      method: "POST",
+      body: JSON.stringify(serviceData),
+    });
+  }
+
+  async deleteService(serviceId) {
+    if (this.isDesktop && window.go?.main?.App?.DeleteService) {
+      try {
+        console.log("📱 Deleting service via Wails:", serviceId);
+        await window.go.main.App.DeleteService(serviceId);
+        console.log("✅ Service deleted via desktop API");
+        return { success: true };
+      } catch (error) {
+        console.error("Desktop API error:", error);
+        throw new Error(error.message || "Failed to delete service");
+      }
+    }
+
+    // Web mode - use HTTP API
+    console.log("🌐 Deleting service via HTTP API:", serviceId);
+    await this.makeHttpRequest(`/api/v1/services/${serviceId}`, {
+      method: "DELETE",
+    });
+    return { success: true };
+  }
+
+  async getServiceStats() {
+    if (this.isDesktop && window.go?.main?.App?.GetServiceStats) {
+      try {
+        console.log("📱 Fetching service stats via Wails...");
+        const stats = await window.go.main.App.GetServiceStats();
+        console.log("✅ Desktop API returned stats:", stats);
+        return stats;
+      } catch (error) {
+        console.error("Desktop API error:", error);
+        // Fallback to HTTP API
+        return this.makeHttpRequest("/api/v1/services/stats");
+      }
+    }
+
+    // Web mode - use HTTP API
+    console.log("🌐 Fetching stats via HTTP API...");
+    return this.makeHttpRequest("/api/v1/services/stats");
+  }
+
+  // =============================================================================
+  // AUTHENTICATION (Web mode only - desktop doesn't need auth)
+  // =============================================================================
+
+  async login(email, password) {
+    if (this.isDesktop) {
+      // Desktop mode - create a mock auth response
+      console.log("🖥️  Desktop mode - skipping authentication");
+      return {
+        token: "desktop-mode-token",
+        user: {
+          id: "desktop-user",
+          email: "desktop@user.local",
+          first_name: "Desktop",
+          last_name: "User",
+          email_notifications: false,
+        },
+      };
+    }
+
+    // Web mode - use HTTP API
+    return this.makeHttpRequest("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+  }
+
+  async register(email, password, firstName, lastName) {
+    if (this.isDesktop) {
+      // Desktop mode - create a mock auth response
+      console.log("🖥️  Desktop mode - skipping registration");
+      return {
+        token: "desktop-mode-token",
+        user: {
+          id: "desktop-user",
+          email: "desktop@user.local",
+          first_name: firstName || "Desktop",
+          last_name: lastName || "User",
+          email_notifications: false,
+        },
+      };
+    }
+
+    // Web mode - use HTTP API
+    return this.makeHttpRequest("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({
+        email,
+        password,
+        first_name: firstName,
+        last_name: lastName,
+      }),
+    });
+  }
+
+  // =============================================================================
+  // HTTP API HELPERS (for web mode and fallback)
+  // =============================================================================
+
+  async makeHttpRequest(endpoint, options = {}) {
+    // FIXED: Always use a valid base URL
+    const apiBase = await this.getAPIEndpoint();
+    const url = `${apiBase}${endpoint}`;
+
+    console.log(`🌐 Making HTTP request: ${options.method || "GET"} ${url}`);
+
     const config = {
       headers: {
-        'Content-Type': 'application/json',
-        ...(this.accessToken && { 'Authorization': `Bearer ${this.accessToken}` }),
+        "Content-Type": "application/json",
+        // REMOVED: Don't require auth tokens in desktop mode
+        // The desktop app should handle auth internally
         ...options.headers,
       },
       ...options,
     };
 
     try {
-      console.log(`Making API request: ${options.method || 'GET'} ${url}`);
       const response = await fetch(url, config);
-      
-      // Handle token refresh for 401 errors
-      if (response.status === 401 && this.accessToken && endpoint !== '/auth/refresh') {
-        console.log('Got 401, attempting token refresh...');
-        const refreshed = await this.refreshAccessToken();
-        if (refreshed) {
-          // Retry the original request with new token
-          config.headers.Authorization = `Bearer ${this.accessToken}`;
-          return await fetch(url, config);
-        } else {
-          // Refresh failed, clear auth and redirect to login
-          this.clearAuth();
-          throw new Error('Session expired. Please login again.');
-        }
-      }
 
-      // Handle rate limiting
-      if (response.status === 429) {
-        const retryAfter = response.headers.get('Retry-After') || '60';
-        throw new Error(`Rate limit exceeded. Please wait ${retryAfter} seconds before trying again.`);
-      }
+      console.log(`📡 Response status: ${response.status}`);
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('API Error:', response.status, errorData);
-        throw new Error(errorData.error || errorData.message || `HTTP ${response.status}`);
+        const error = await response.json().catch(() => ({
+          error: `HTTP ${response.status} ${response.statusText}`,
+        }));
+        throw new Error(error.error || `HTTP ${response.status}`);
       }
 
-      console.log(`API request successful: ${endpoint}`);
-      return response;
+      const data = await response.json();
+      console.log("✅ HTTP API success:", data);
+      return data;
     } catch (error) {
-      console.error(`API Request failed: ${endpoint}`, error);
+      console.error(`❌ HTTP API error: ${endpoint}`, error);
       throw error;
     }
   }
 
-  async refreshAccessToken() {
-    if (this.refreshPromise) {
-      return this.refreshPromise;
-    }
-
-    if (!this.refreshToken) {
-      console.log('No refresh token available');
-      return false;
-    }
-
-    this.refreshPromise = this.makeRequest('/auth/refresh', {
-      method: 'POST',
-      body: JSON.stringify({ refresh_token: this.refreshToken }),
-    }).then(async (response) => {
-      const data = await response.json();
-      console.log('Token refresh successful');
-      
-      this.setTokens(data.access_token || data.token, data.refresh_token || this.refreshToken);
-      
-      // Update stored tokens
-      sessionStorage.setItem('auth-token', this.accessToken);
-      if (data.refresh_token) {
-        sessionStorage.setItem('refresh-token', data.refresh_token);
-      }
-      
-      return true;
-    }).catch((error) => {
-      console.error('Token refresh failed:', error);
-      this.clearAuth();
-      return false;
-    }).finally(() => {
-      this.refreshPromise = null;
-    });
-
-    return this.refreshPromise;
-  }
-
-  clearAuth() {
-    this.accessToken = null;
-    this.refreshToken = null;
-    sessionStorage.removeItem('auth-token');
-    sessionStorage.removeItem('refresh-token');
-    sessionStorage.removeItem('auth-user');
-  }
-
-  // Authentication endpoints
-  async register(email, password, firstName, lastName) {
-    console.log('Attempting registration for:', email);
-    const response = await this.makeRequest('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({ 
-        email, 
-        password, 
-        first_name: firstName, 
-        last_name: lastName 
-      }),
-    });
-    return response.json();
-  }
-
-  async login(email, password) {
-    console.log('Attempting login for:', email);
-    const response = await this.makeRequest('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
-    return response.json();
-  }
-
-  async logout() {
-    try {
-      await this.makeRequest('/auth/logout', {
-        method: 'POST',
-      });
-    } catch (error) {
-      console.error('Logout API call failed:', error);
-      // Still clear local auth data even if API call fails
-    } finally {
-      this.clearAuth();
-    }
-  }
-
-  // Services endpoints - matching your backend routes exactly
-  async getServices() {
-    console.log('Fetching services...');
-    const response = await this.makeRequest('/api/v1/services');
-    return response.json();
-  }
-
-  async addService(serviceData) {
-    console.log('Adding service:', serviceData);
-    const response = await this.makeRequest('/api/v1/services', {
-      method: 'POST',
-      body: JSON.stringify(serviceData),
-    });
-    return response.json();
-  }
-
-  async updateService(serviceId, serviceData) {
-    console.log('Updating service:', serviceId);
-    const response = await this.makeRequest(`/api/v1/services/${encodeURIComponent(serviceId)}`, {
-      method: 'PUT',
-      body: JSON.stringify(serviceData),
-    });
-    return response.json();
-  }
-
-  async deleteService(serviceId) {
-    console.log('Deleting service:', serviceId);
-    const response = await this.makeRequest(`/api/v1/services/${encodeURIComponent(serviceId)}`, {
-      method: 'DELETE',
-    });
-    return response.json();
-  }
-
-  // Additional endpoints
-  async getProfile() {
-    const response = await this.makeRequest('/api/v1/profile');
-    return response.json();
-  }
-
-  async getSecurityStatus() {
-    const response = await this.makeRequest('/api/v1/security/status');
-    return response.json();
-  }
+  // =============================================================================
+  // UTILITY METHODS
+  // =============================================================================
 
   async getHealth() {
-    const response = await this.makeRequest('/health');
-    return response.json();
+    try {
+      const endpoint = await this.getAPIEndpoint();
+      const response = await fetch(`${endpoint}/health`);
+      return response.json();
+    } catch (error) {
+      console.error("Health check failed:", error);
+      return { status: "unhealthy", error: error.message };
+    }
   }
 
-  // Real-time updates using polling
-  async pollServices(callback, interval = 30000) {
+  // Real-time updates using polling (works for both modes)
+  async startPolling(callback, interval = 30000) {
+    console.log(`🔄 Starting polling every ${interval}ms`);
+
     const poll = async () => {
       try {
-        const data = await this.getServices();
-        callback(data);
+        const services = await this.getServices();
+        const stats = await this.getServiceStats();
+        callback({ services, stats, error: null });
       } catch (error) {
-        console.error('Polling error:', error);
-        callback({ error: error.message });
+        console.error("Polling error:", error);
+        callback({ services: [], stats: null, error: error.message });
       }
     };
 
@@ -217,101 +255,36 @@ class ApiService {
 
     // Set up interval polling
     const pollInterval = setInterval(poll, interval);
-    
+
     // Return cleanup function
     return () => {
-      console.log('Stopping services polling');
+      console.log("🛑 Stopping polling");
       clearInterval(pollInterval);
     };
   }
 
-  // WebSocket connection using your backend's /ws endpoint
-  connectWebSocket(onMessage, onError) {
-    // Support any baseURL by converting the protocol to WS/WSS
-    const urlObj = new URL(this.baseURL);
-    const wsProtocol = urlObj.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsURL = `${wsProtocol}//${urlObj.host}/ws`;
-    console.log('Connecting to WebSocket:', wsURL);
-    
-    const ws = new WebSocket(wsURL);
+  // Desktop app info
+  async getAppInfo() {
+    const apiEndpoint = await this.getAPIEndpoint();
 
-    ws.onopen = () => {
-      console.log('WebSocket connected to:', wsURL);
-      // Send auth token if available
-      if (this.accessToken) {
-        ws.send(JSON.stringify({ type: 'auth', token: this.accessToken }));
-      }
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        console.log('WebSocket message received:', data);
-        onMessage(data);
-      } catch (error) {
-        console.error('WebSocket message error:', error);
-        // If it's not JSON, maybe it's a simple message
-        onMessage({ type: 'raw', data: event.data });
-      }
-    };
-
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      onError?.(error);
-    };
-
-    ws.onclose = (event) => {
-      console.log('WebSocket disconnected:', event.code, event.reason);
-      // Attempt to reconnect after delay (only if it wasn't a manual close)
-      if (event.code !== 1000) {
-        setTimeout(() => {
-          console.log('Attempting WebSocket reconnection...');
-          this.connectWebSocket(onMessage, onError);
-        }, 5000);
-      }
-    };
-
-    return ws;
+    if (this.isDesktop) {
+      return {
+        mode: "desktop",
+        platform: navigator.platform,
+        userAgent: navigator.userAgent,
+        apiEndpoint,
+      };
+    } else {
+      return {
+        mode: "web",
+        platform: navigator.platform,
+        userAgent: navigator.userAgent,
+        apiEndpoint,
+      };
+    }
   }
-
-async getAlerts() {
-  return this.request('/alerts');
-}
-
-async createAlert(alertData) {
-  return this.request('/alerts', {
-    method: 'POST',
-    body: JSON.stringify(alertData),
-  });
-}
-
-async updateAlert(alertId, alertData) {
-  return this.request(`/alerts/${alertId}`, {
-    method: 'PUT',
-    body: JSON.stringify(alertData),
-  });
-}
-
-async deleteAlert(alertId) {
-  return this.request(`/alerts/${alertId}`, {
-    method: 'DELETE',
-  });
-}
-
-async getNotificationSettings() {
-  return this.request('/notifications/settings');
-}
-
-async updateNotificationSettings(settings) {
-  return this.request('/notifications/settings', {
-    method: 'PUT',
-    body: JSON.stringify(settings),
-  });
-}
-
 }
 
 // Create singleton instance
-const apiService = new ApiService();
-
-export default apiService;
+const desktopApiService = new DesktopApiService();
+export default desktopApiService;
