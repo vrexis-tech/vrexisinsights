@@ -1,0 +1,9 @@
+{
+  "name": "Vrexis Insights",
+  "author": "Vrexis",
+  "frontend": {
+    "dir": "../frontend",
+    "install": "npm install",
+    "build": "npm run build"
+  }
+}

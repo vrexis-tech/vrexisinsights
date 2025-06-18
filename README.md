@@ -103,6 +103,18 @@ npm run build
 
 The build folder will contain everything needed to deploy your SaaS application.
 
+## 🖥 Building the Desktop App
+The backend is also configured to run as a [Wails](https://wails.io) desktop
+application. Use the following commands in the `backend` directory:
+
+```bash
+# Start in development mode
+wails dev
+
+# Create production binaries
+wails build
+```
+
 ## 🎯 Demo Data
 The application includes sample service data so you can see how it works immediately. In production, you would connect this to your actual monitoring backend API.
 
