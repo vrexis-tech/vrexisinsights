@@ -371,7 +371,7 @@ func loadConfig() *Config {
 		EmailFrom:        getEnv("EMAIL_FROM", ""),
 	}
 
-	originsStr := getEnv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
+	originsStr := getEnv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:34115,http://127.0.0.1:34115")
 	config.AllowedOrigins = strings.Split(originsStr, ",")
 
 	if config.JWTSecret == "" {
