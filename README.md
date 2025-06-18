@@ -59,6 +59,14 @@ module.exports = {
 npm start
 ```
 
+### 6. Backend Allowed Origins
+When running the backend separately (for example with the desktop build), ensure
+the `ALLOWED_ORIGINS` environment variable allows calls from the desktop app:
+
+```bash
+ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://localhost:34115,http://127.0.0.1:34115
+```
+
 ## ✨ Features Included
 
 ### 🔐 **Authentication System**
